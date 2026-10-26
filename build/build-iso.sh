@@ -54,6 +54,14 @@ lb config noauto \
     --iso-volume "DJOS $VERSION"
 
 echo "==> 注入 DJOS 文件"
+# 旧版 live-build 会把安全源 Suite 拼成 <dist>/updates（bookworm/updates 已不存在，会 404），
+# 这里统一改为 Debian 12 实际使用的 bookworm-security。
+LBFIX=$(grep -rl 'bookworm/updates' config 2>/dev/null || true)
+if [ -n "$LBFIX" ]; then
+    echo "$LBFIX" | while read -r f; do sed -i 's#bookworm/updates#bookworm-security#g' "$f"; done
+    echo "    已修正安全源 Suite：$LBFIX"
+fi
+
 mkdir -p config/includes.chroot
 cp -a "$ROOT/build/includes.chroot/." config/includes.chroot/
 
