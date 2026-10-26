@@ -10,7 +10,8 @@ BUILD="$ROOT/build/live"
 CHROOT="$BUILD/chroot"
 ISODIR="$BUILD/iso"
 OUT="$ROOT/out"
-VERSION="$(tr -d '\r\n' < "$ROOT/VERSION")"
+# 版本号：优先取 CI 传入的 DJOS_VERSION（来自 git tag），否则回退到 VERSION 文件
+VERSION="${DJOS_VERSION:-$(tr -d '\r\n' < "$ROOT/VERSION")}"
 
 # 软件源可用环境变量覆盖；默认阿里云（国内外均可访问）
 MIRROR="${DJOS_MIRROR:-https://mirrors.aliyun.com/debian}"

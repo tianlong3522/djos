@@ -29,6 +29,10 @@ jobs:
       - name: Build ISO (teed log)
         run: |
           mkdir -p out
+          # 用 git tag 作为 ISO 版本号，文件名形如 DJOS-1.0.15-amd64.iso
+          if [[ "$GITHUB_REF_NAME" =~ ^v[0-9] ]]; then
+            export DJOS_VERSION="${GITHUB_REF_NAME#v}"
+          fi
           set -o pipefail
           sudo -E bash ./build/build-iso.sh > build.log 2>&1; RC=$?
           echo "== EXIT CODE: $RC =="
