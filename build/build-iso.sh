@@ -54,10 +54,18 @@ echo "==> chroot 内更新包列表"
 chroot "$CHROOT" env DEBIAN_FRONTEND=noninteractive apt-get update
 
 echo "==> 解析软件包清单"
+# 固件/微码包经常因签名或元数据问题返回非零退出码，与主流程解耦
+HARD_SPLIT="firmware-linux firmware-iwlwifi intel-microcode amd64-microcode shim-signed"
 PKGS="$(grep -vE '^[[:space:]]*(#|$)' "$ROOT/build/package-lists/djos.list.chroot" | tr -d '\r' | tr '\n' ' ')"
 INSTALL=""
+HARD=""
 MISSING=""
 for p in $PKGS; do
+    case " $HARD_SPLIT " in
+        *" $p "*)
+            HARD="$HARD $p"
+            continue ;;
+    esac
     if chroot "$CHROOT" apt-cache show "$p" >/dev/null 2>&1; then
         INSTALL="$INSTALL $p"
     else
@@ -71,11 +79,19 @@ for p in live-boot live-boot-initramfs-tools linux-image-amd64 systemd-sysv; do
         *) echo "缺少必需软件包：$p" >&2; exit 1 ;;
     esac
 done
+echo "    主包数: $(echo $INSTALL | wc -w)，可选固件: $(echo $HARD | wc -w)"
 
-echo "==> 安装系统软件包（耗时最长）"
+echo "==> 安装主系统包（耗时最长）"
 chroot "$CHROOT" env DEBIAN_FRONTEND=noninteractive \
-    apt-get install -y --no-install-recommends $INSTALL
+    apt-get install -y --no-install-recommends --fix-broken $INSTALL
 chroot "$CHROOT" apt-get clean
+
+if [ -n "$HARD" ]; then
+    echo "==> 安装固件/微码/安全启动包（失败不阻塞）"
+    chroot "$CHROOT" env DEBIAN_FRONTEND=noninteractive \
+        apt-get install -y --no-install-recommends --fix-broken $HARD || true
+    chroot "$CHROOT" apt-get clean
+fi
 
 echo "==> 注入 DJOS 文件"
 cp -a "$ROOT/build/includes.chroot/." "$CHROOT/"

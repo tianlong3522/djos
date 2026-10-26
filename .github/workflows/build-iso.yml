@@ -24,25 +24,21 @@ jobs:
             debootstrap debian-archive-keyring \
             squashfs-tools xorriso \
             grub-common grub-pc-bin grub-efi-amd64-bin \
-            mtools dosfstools ca-certificates curl \
-            linux-image-generic
-
-      - name: Show environment
-        run: |
-          uname -a
-          sudo debootstrap --version
-          which debootstrap mksquashfs grub-mkrescue xorriso linux-image-amd64 2>&1 || true
-          ls /boot/vmlinuz-* 2>&1 || true
+            mtools dosfstools ca-certificates curl
 
       - name: Build ISO (teed log)
         run: |
           mkdir -p out
           set -o pipefail
-          sudo -E bash -x ./build/build-iso.sh 2>&1 | tee build.log || true
-          echo "== log tail =="
-          tail -n 60 build.log
+          sudo -E bash ./build/build-iso.sh > build.log 2>&1; RC=$?
+          echo "== EXIT CODE: $RC =="
           echo "== ISO files =="
-          ls -lh out/ || true
+          ls -lh out/ 2>&1 || true
+          echo "== log tail (last 80 lines) =="
+          tail -n 80 build.log
+          echo "== ERROR lines in log =="
+          grep -n -E 'E:|Err:|ERROR|error|failed|returned non-zero|command not found|exit code|Killed|Terminated' build.log | tail -n 40 || true
+          exit $RC
 
       - name: Upload build log
         if: always()
