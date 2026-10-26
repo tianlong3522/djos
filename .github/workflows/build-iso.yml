@@ -59,10 +59,12 @@ jobs:
           if-no-files-found: error
           compression-level: 0
 
-      - name: Publish release asset
+      - name: Publish release asset (log + iso，成败都发，便于取日志)
         if: startsWith(github.ref, 'refs/tags/')
         uses: softprops/action-gh-release@v2
         with:
           files: |
+            build.log
             out/*.iso
             out/*.sha256
+          fail_on_unmatched_files: false
