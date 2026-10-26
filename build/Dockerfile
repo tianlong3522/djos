@@ -1,20 +1,19 @@
 # 用容器构建 DJOS ISO（适用于 Linux/macOS/Windows + Docker Desktop）
 # 用法：
-#   docker build -t djos-builder .
+#   docker build -f build/Dockerfile -t djos-builder .
 #   docker run --rm --privileged -v "$PWD/out:/project/out" djos-builder
 FROM debian:bookworm
 
 RUN apt-get update && apt-get install -y --no-install-recommends \
-    live-build \
+    debootstrap \
+    debian-archive-keyring \
+    squashfs-tools \
     xorriso \
-    isolinux \
-    syslinux-common \
-    syslinux-efi \
+    grub-common \
     grub-pc-bin \
     grub-efi-amd64-bin \
     mtools \
     dosfstools \
-    squashfs-tools \
     ca-certificates \
     curl \
     && rm -rf /var/lib/apt/lists/*
