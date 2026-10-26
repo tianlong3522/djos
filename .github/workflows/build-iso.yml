@@ -7,7 +7,7 @@ on:
       - "v*"
 
 permissions:
-  contents: read
+  contents: write
 
 jobs:
   build:
@@ -29,7 +29,8 @@ jobs:
           sudo env \
             DJOS_MIRROR=https://deb.debian.org/debian \
             DJOS_MIRROR_SECURITY=https://security.debian.org/debian-security \
-            ./build/build-iso.sh
+            bash ./build/build-iso.sh
+        shell: bash
 
       - name: Upload ISO
         uses: actions/upload-artifact@v4
@@ -40,3 +41,11 @@ jobs:
             out/*.sha256
           if-no-files-found: error
           compression-level: 0
+
+      - name: Publish release asset
+        if: startsWith(github.ref, 'refs/tags/')
+        uses: softprops/action-gh-release@v2
+        with:
+          files: |
+            out/*.iso
+            out/*.sha256
