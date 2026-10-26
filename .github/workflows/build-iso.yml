@@ -12,22 +12,46 @@ permissions:
 jobs:
   build:
     runs-on: ubuntu-latest
-    timeout-minutes: 120
+    timeout-minutes: 180
     steps:
       - name: Checkout
         uses: actions/checkout@v4
 
-      # 直接用 Debian bookworm 容器构建，避免 Ubuntu runner 自带旧版 live-build
-      # 在安全源 Suite（bookworm/updates）等细节上不兼容。
-      - name: Build ISO in Debian bookworm container
+      - name: Install build tools
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            debootstrap debian-archive-keyring \
+            squashfs-tools xorriso \
+            grub-common grub-pc-bin grub-efi-amd64-bin \
+            mtools dosfstools ca-certificates curl \
+            linux-image-generic
+
+      - name: Show environment
+        run: |
+          uname -a
+          sudo debootstrap --version
+          which debootstrap mksquashfs grub-mkrescue xorriso linux-image-amd64 2>&1 || true
+          ls /boot/vmlinuz-* 2>&1 || true
+
+      - name: Build ISO (teed log)
         run: |
           mkdir -p out
-          docker build -f build/Dockerfile -t djos-builder .
-          docker run --rm --privileged \
-            -e DJOS_MIRROR="https://deb.debian.org/debian" \
-            -e DJOS_MIRROR_SECURITY="https://security.debian.org/debian-security" \
-            -v "$PWD/out:/project/out" \
-            djos-builder
+          set -o pipefail
+          sudo -E bash -x ./build/build-iso.sh 2>&1 | tee build.log || true
+          echo "== log tail =="
+          tail -n 60 build.log
+          echo "== ISO files =="
+          ls -lh out/ || true
+
+      - name: Upload build log
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: build-log
+          path: build.log
+          if-no-files-found: warn
+          compression-level: 0
 
       - name: Upload ISO
         uses: actions/upload-artifact@v4

@@ -3,6 +3,7 @@
 #   debootstrap 引导 base → chroot 内装包 → mksquashfs → grub-mkrescue 生成 BIOS+UEFI 双引导 ISO
 # 不再依赖 live-build，所有步骤显式可控。需要 root。
 set -euo pipefail
+set -x
 
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 BUILD="$ROOT/build/live"
