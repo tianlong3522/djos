@@ -30,14 +30,16 @@ mkdir -p "$BUILD" "$OUT"
 
 cd "$BUILD"
 echo "==> 初始化 live-build (Debian 12 bookworm / amd64)"
+lb --version || true
+# 注意：不同发行版的 live-build 版本差异较大，这里只使用各版本都支持的选项；
+# iso-hybrid + amd64 的默认引导器即为 syslinux + grub-efi（BIOS/UEFI 双引导）。
 lb config noauto \
     --mode debian \
     --distribution bookworm \
     --architecture amd64 \
     --archive-areas "main contrib non-free non-free-firmware" \
     --binary-images iso-hybrid \
-    --bootloaders "syslinux,grub-efi" \
-    --debian-installer none \
+    --debian-installer false \
     --initsystem systemd \
     --memtest none \
     --linux-flavours amd64 \
@@ -49,8 +51,7 @@ lb config noauto \
     --mirror-binary-security "$MIRROR_SEC" \
     --iso-application "DJOS" \
     --iso-publisher "DJOS Project" \
-    --iso-volume "DJOS $VERSION" \
-    --image-name "DJOS-$VERSION-amd64"
+    --iso-volume "DJOS $VERSION"
 
 echo "==> 注入 DJOS 文件"
 mkdir -p config/includes.chroot
