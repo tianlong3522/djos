@@ -1,0 +1,44 @@
+#!/bin/bash
+# 该脚本在 Live 构建的 chroot 阶段执行，用于烘焙 DJOS 服务。
+set -e
+export DEBIAN_FRONTEND=noninteractive
+export PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
+
+mkdir -p /opt/djos /var/lib/djos /var/log/djos /volume1 /etc/djos /etc/exports.d
+chmod 755 /opt/djos
+chmod 700 /var/lib/djos
+
+install -m 0755 /opt/djos/installer/djos-install /usr/local/sbin/djos-install
+install -m 0755 /opt/djos/installer/djos-firstboot /usr/local/sbin/djos-firstboot
+chmod 0755 /opt/djos/installer/*.sh 2>/dev/null || true
+chmod -R a+rX /opt/djos/web /opt/djos/api /opt/djos/packages
+chmod 0700 /opt/djos/installer
+
+ln -sf /etc/nginx/sites-available/djos /etc/nginx/sites-enabled/djos
+rm -f /etc/nginx/sites-enabled/default
+
+if [ -f /etc/samba/smb.conf ] && ! grep -q 'djos.conf' /etc/samba/smb.conf; then
+    sed -i '/^\[global\]/a\   include = /etc/samba/djos.conf' /etc/samba/smb.conf
+fi
+touch /etc/exports.d/djos.exports
+chmod 644 /etc/exports.d/djos.exports
+
+mkdir -p /etc/docker
+if [ ! -f /etc/docker/daemon.json ]; then
+    cat > /etc/docker/daemon.json <<'EOF'
+{
+  "data-root": "/volume1/docker",
+  "log-driver": "json-file",
+  "log-opts": { "max-size": "10m", "max-file": "3" }
+}
+EOF
+fi
+
+systemctl enable djos-api.service djos-firstboot.service djos-installer.service nginx.service >/dev/null 2>&1 || true
+systemctl enable ssh chrony avahi-daemon >/dev/null 2>&1 || true
+systemctl set-default multi-user.target >/dev/null 2>&1 || true
+
+# 让 Live 环境也可直接访问 Web 管理界面（若安装器未运行）
+systemctl enable djos-api.service >/dev/null 2>&1 || true
+
+echo "DJOS hook finished"

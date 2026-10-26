@@ -1,0 +1,204 @@
+{
+  "version": 1,
+  "categories": ["全部", "媒体", "下载", "同步", "开发", "家庭", "网络", "备份", "游戏", "工具"],
+  "apps": [
+    {
+      "id": "jellyfin",
+      "name": "Jellyfin",
+      "vendor": "Jellyfin",
+      "category": "媒体",
+      "tagline": "开源影音中心",
+      "description": "电影、剧集、音乐与照片的私人流媒体服务，支持硬件转码与多端播放。",
+      "icon": "JF",
+      "color": "#7b2ff7",
+      "image": "jellyfin/jellyfin:latest",
+      "ports": ["8096:8096"],
+      "volumes": [
+        {"host": "/volume1/appdata/jellyfin", "container": "/config"},
+        {"host": "/volume1/media", "container": "/media"}
+      ],
+      "env": ["PUID=1000", "PGID=1000", "TZ=Asia/Shanghai"],
+      "web_port": 8096
+    },
+    {
+      "id": "qbittorrent",
+      "name": "qBittorrent",
+      "vendor": "linuxserver.io",
+      "category": "下载",
+      "tagline": "BT / PT 下载器",
+      "description": "功能完整的 BitTorrent 客户端，内置 Web 界面，支持 RSS 与限速。",
+      "icon": "QB",
+      "color": "#2f6fed",
+      "image": "linuxserver/qbittorrent:latest",
+      "ports": ["8081:8080", "6881:6881", "6881:6881/udp"],
+      "volumes": [
+        {"host": "/volume1/appdata/qbittorrent", "container": "/config"},
+        {"host": "/volume1/downloads", "container": "/downloads"}
+      ],
+      "env": ["PUID=1000", "PGID=1000", "TZ=Asia/Shanghai", "WEBUI_PORT=8080"],
+      "web_port": 8081
+    },
+    {
+      "id": "syncthing",
+      "name": "Syncthing",
+      "vendor": "Syncthing",
+      "category": "同步",
+      "tagline": "点对点文件同步",
+      "description": "去中心化的文件夹同步工具，跨设备实时同步，无需公网 IP。",
+      "icon": "ST",
+      "color": "#0e9f6e",
+      "image": "linuxserver/syncthing:latest",
+      "ports": ["8384:8384", "22000:22000/tcp", "22000:22000/udp", "21027:21027/udp"],
+      "volumes": [
+        {"host": "/volume1/appdata/syncthing", "container": "/config"},
+        {"host": "/volume1", "container": "/data"}
+      ],
+      "env": ["PUID=1000", "PGID=1000", "TZ=Asia/Shanghai"],
+      "web_port": 8384
+    },
+    {
+      "id": "code-server",
+      "name": "Code Server",
+      "vendor": "Coder",
+      "category": "开发",
+      "tagline": "浏览器里的 VS Code",
+      "description": "在 NAS 上运行完整的 VS Code，任何设备打开浏览器即可编写代码。",
+      "icon": "CS",
+      "color": "#0b74d9",
+      "image": "linuxserver/code-server:latest",
+      "ports": ["8443:8443"],
+      "volumes": [
+        {"host": "/volume1/appdata/code-server", "container": "/config"},
+        {"host": "/volume1", "container": "/data"}
+      ],
+      "env": ["PUID=1000", "PGID=1000", "TZ=Asia/Shanghai"],
+      "web_port": 8443
+    },
+    {
+      "id": "nextcloud",
+      "name": "Nextcloud",
+      "vendor": "Nextcloud",
+      "category": "同步",
+      "tagline": "私有云盘",
+      "description": "文件同步、在线协作、日历与联系人，打造属于自己的私有云。",
+      "icon": "NC",
+      "color": "#0082c9",
+      "image": "linuxserver/nextcloud:latest",
+      "ports": ["8082:443"],
+      "volumes": [
+        {"host": "/volume1/appdata/nextcloud", "container": "/config"},
+        {"host": "/volume1/nextcloud", "container": "/data"}
+      ],
+      "env": ["PUID=1000", "PGID=1000", "TZ=Asia/Shanghai"],
+      "web_port": 8082
+    },
+    {
+      "id": "home-assistant",
+      "name": "Home Assistant",
+      "vendor": "Nabu Casa",
+      "category": "家庭",
+      "tagline": "智能家居中枢",
+      "description": "本地优先的家庭自动化平台，接入灯光、传感器、空调与摄像头。",
+      "icon": "HA",
+      "color": "#18b6ec",
+      "image": "ghcr.io/home-assistant/home-assistant:stable",
+      "ports": ["8123:8123"],
+      "volumes": [
+        {"host": "/volume1/appdata/homeassistant", "container": "/config"},
+        {"host": "/etc/localtime", "container": "/etc/localtime", "read_only": true}
+      ],
+      "env": ["TZ=Asia/Shanghai"],
+      "web_port": 8123
+    },
+    {
+      "id": "adguard-home",
+      "name": "AdGuard Home",
+      "vendor": "AdGuard",
+      "category": "网络",
+      "tagline": "全屋广告拦截",
+      "description": "网络级广告与追踪器拦截，附带 DNS 查询统计和家长控制。",
+      "icon": "AG",
+      "color": "#67b279",
+      "image": "adguard/adguardhome:latest",
+      "ports": ["3000:3000", "53:53/tcp", "53:53/udp"],
+      "volumes": [
+        {"host": "/volume1/appdata/adguard/work", "container": "/opt/adguardhome/work"},
+        {"host": "/volume1/appdata/adguard/conf", "container": "/opt/adguardhome/conf"}
+      ],
+      "env": [],
+      "web_port": 3000
+    },
+    {
+      "id": "portainer",
+      "name": "Portainer",
+      "vendor": "Portainer",
+      "category": "工具",
+      "tagline": "Docker 图形管理",
+      "description": "可视化管理容器、镜像、网络与卷，适合进阶用户。",
+      "icon": "PT",
+      "color": "#13b5ea",
+      "image": "portainer/portainer-ce:latest",
+      "ports": ["9443:9443", "9000:9000"],
+      "volumes": [
+        {"host": "/var/run/docker.sock", "container": "/var/run/docker.sock"},
+        {"host": "/volume1/appdata/portainer", "container": "/data"}
+      ],
+      "env": [],
+      "web_port": 9443
+    },
+    {
+      "id": "duplicati",
+      "name": "Duplicati",
+      "vendor": "Duplicati",
+      "category": "备份",
+      "tagline": "加密云备份",
+      "description": "将 NAS 数据加密备份到对象存储、网盘或另一台服务器。",
+      "icon": "DU",
+      "color": "#e0245e",
+      "image": "linuxserver/duplicati:latest",
+      "ports": ["8200:8200"],
+      "volumes": [
+        {"host": "/volume1/appdata/duplicati", "container": "/config"},
+        {"host": "/volume1/backup", "container": "/backups"},
+        {"host": "/volume1", "container": "/source", "read_only": true}
+      ],
+      "env": ["PUID=1000", "PGID=1000", "TZ=Asia/Shanghai"],
+      "web_port": 8200
+    },
+    {
+      "id": "navidrome",
+      "name": "Navidrome",
+      "vendor": "Navidrome",
+      "category": "媒体",
+      "tagline": "个人音乐流",
+      "description": "轻量级音乐服务器，支持 Subsonic 协议与海量客户端。",
+      "icon": "NV",
+      "color": "#f59e0b",
+      "image": "deluan/navidrome:latest",
+      "ports": ["4533:4533"],
+      "volumes": [
+        {"host": "/volume1/appdata/navidrome", "container": "/data"},
+        {"host": "/volume1/media/music", "container": "/music", "read_only": true}
+      ],
+      "env": ["ND_MUSICFOLDER=/music", "ND_DATAFOLDER=/data"],
+      "web_port": 4533
+    },
+    {
+      "id": "minecraft",
+      "name": "Minecraft",
+      "vendor": "itzg",
+      "category": "游戏",
+      "tagline": "自建游戏服务器",
+      "description": "一键部署 Minecraft Java 版服务器，存档保存在 NAS 上。",
+      "icon": "MC",
+      "color": "#3c8527",
+      "image": "itzg/minecraft-server:latest",
+      "ports": ["25565:25565"],
+      "volumes": [
+        {"host": "/volume1/appdata/minecraft", "container": "/data"}
+      ],
+      "env": ["EULA=TRUE", "TYPE=PAPER", "MEMORY=2G", "TZ=Asia/Shanghai"],
+      "web_port": 0
+    }
+  ]
+}

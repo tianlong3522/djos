@@ -1,0 +1,117 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="theme-color" content="#0b74d9">
+    <title>DJOS · 私有云存储系统</title>
+    <link rel="stylesheet" href="assets/app.css">
+    <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='15' fill='%230b74d9'/%3E%3Ctext x='32' y='41' font-family='Arial' font-size='24' font-weight='bold' fill='white' text-anchor='middle'%3EDJ%3C/text%3E%3C/svg%3E">
+</head>
+<body>
+<div id="login" class="login-shell">
+    <div class="login-card">
+        <section class="login-brand">
+            <div class="login-logo">
+                <div class="logo-mark">DJ</div>
+                <div>
+                    <h1>DJOS</h1>
+                    <p class="sub">Private Cloud Storage</p>
+                </div>
+            </div>
+            <div class="login-copy">
+                <h2>把数据，<br>留在自己手里。</h2>
+                <p>面向 x86 主机的私有 NAS 系统。存储、共享、备份、套件与远程访问，一次安装全部就绪。</p>
+                <ul class="login-points">
+                    <li><span class="dot"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 7h16M4 12h16M4 17h16"/></svg></span>Btrfs 存储池与快照保护</li>
+                    <li><span class="dot"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 5h16v14H4z"/><path d="M8 9h8M8 13h5"/></svg></span>SMB / NFS 文件共享</li>
+                    <li><span class="dot"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 3l8 4v5c0 5-3.5 8-8 9-4.5-1-8-4-8-9V7z"/></svg></span>套件中心与 Docker 生态</li>
+                </ul>
+            </div>
+            <div class="login-foot">DJOS 1.0 · 为每一台闲置电脑赋予新的生命</div>
+        </section>
+
+        <section class="login-form-wrap">
+            <h3>登录 DJOS</h3>
+            <p class="hint">使用管理员账户进入控制台</p>
+            <div id="loginError" class="login-error hidden"></div>
+            <form id="loginForm" autocomplete="on">
+                <div class="field">
+                    <label for="username">用户名</label>
+                    <input id="username" name="username" class="input" type="text" autocomplete="username" placeholder="admin" required>
+                </div>
+                <div class="field">
+                    <label for="password">密码</label>
+                    <input id="password" name="password" class="input" type="password" autocomplete="current-password" placeholder="请输入密码" required>
+                </div>
+                <button class="btn primary" type="submit" id="loginBtn">登 录</button>
+            </form>
+            <div class="login-demo">
+                还没有设备？<button type="button" id="demoBtn">进入界面演示</button>
+            </div>
+            <div class="login-meta">
+                <span>首次安装的初始密码请见安装完成页</span>
+                <span>v1.0.0</span>
+            </div>
+        </section>
+    </div>
+</div>
+
+<div id="app" class="app hidden">
+    <aside class="sidebar" id="sidebar">
+        <div class="brand">
+            <div class="logo-mark">DJ</div>
+            <div>
+                <div class="brand-name">DJOS</div>
+                <div class="brand-tag">NAS SYSTEM</div>
+            </div>
+        </div>
+        <nav class="nav" id="nav"></nav>
+        <div class="sidebar-foot">
+            <span class="online"><span class="dot"></span>系统正常</span>
+            <span id="sideVersion">v1.0.0</span>
+        </div>
+    </aside>
+
+    <div class="main">
+        <div id="demoBanner" class="demo-banner hidden">
+            <span class="tag">DEMO</span>
+            <span>当前为界面演示模式，所有数据均为模拟。安装 DJOS 后将连接真实系统。</span>
+            <a href="#" id="exitDemo">退出演示</a>
+        </div>
+        <header class="topbar">
+            <button class="icon-btn mobile-toggle" id="menuToggle" aria-label="菜单">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 7h16M4 12h16M4 17h16"/></svg>
+            </button>
+            <div class="crumb"><span>DJOS</span><span>/</span><strong id="crumbText">概览</strong></div>
+            <div class="top-search">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="7"/><path d="M20 20l-3.5-3.5"/></svg>
+                <input id="globalSearch" placeholder="搜索应用、设置或文件…" readonly>
+            </div>
+            <div class="top-actions">
+                <button class="icon-btn" id="notifyBtn" aria-label="通知">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 8a6 6 0 10-12 0c0 7-3 7-3 9h18c0-2-3-2-3-9"/><path d="M10 21h4"/></svg>
+                    <span id="notifyDot" class="badge-dot hidden"></span>
+                </button>
+                <button class="user-chip" id="userBtn">
+                    <span class="avatar" id="avatar">A</span>
+                    <span>
+                        <span class="name" id="userName">admin</span>
+                        <span class="role" id="userRole">管理员</span>
+                    </span>
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M6 9l6 6 6-6"/></svg>
+                </button>
+            </div>
+        </header>
+        <main class="view" id="view"></main>
+    </div>
+</div>
+
+<div id="menuRoot"></div>
+<div id="modalRoot"></div>
+<div id="toastRoot" class="toast-root"></div>
+<div id="paletteRoot"></div>
+
+<script src="assets/app.js"></script>
+</body>
+</html>
