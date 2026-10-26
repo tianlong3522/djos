@@ -32,15 +32,20 @@ cd "$BUILD"
 echo "==> 初始化 live-build (Debian 12 bookworm / amd64)"
 lb --version 2>&1 | head -1 || true
 
-# 不同发行版的 live-build 版本差异较大：
-#  - 旧版会把安全源 Suite 拼成 bookworm/updates（已废弃，apt update 会 404）；
-#  - 支持 --security 的版本直接关闭该源，由我们下面自行写入正确的 bookworm-security 源。
+# Debian 版 live-build 对 bookworm 安全源 Suite 处理不一致：
+# 有的版本仍会生成已废弃的 bookworm/updates（apt update 404），进而导致
+# chroot 内包列表为空、所有软件包 "Unable to locate package"。
+# 因此统一由脚本显式给出 main / updates / security 三条源。
+SYS_SOURCES="deb $MIRROR bookworm main contrib non-free non-free-firmware
+deb $MIRROR bookworm-updates main contrib non-free non-free-firmware
+deb $MIRROR_SEC bookworm-security main contrib non-free non-free-firmware"
+
 SEC_OPTS=""
 if lb config --help 2>/dev/null | grep -q -- '--security'; then
     SEC_OPTS="--security false"
-    echo "    检测到 --security 选项：关闭自动安全源"
+    echo "    检测到 --security 选项：关闭自动安全源（由脚本自行写入）"
 else
-    echo "    未检测到 --security 选项：稍后修正生成的配置"
+    echo "    未检测到 --security 选项：将由脚本覆盖生成的源"
 fi
 
 lb config noauto \
@@ -72,12 +77,11 @@ if [ -n "$LBFIX" ]; then
     echo "    已修正安全源 Suite：$LBFIX"
 fi
 
-# 自行补一份正确的安全源（放在 config/archives 会进入 chroot 的 sources.list.d）
+# 完整软件源写入 sources.list.d，chroot 阶段即使 live-build 重写
+# /etc/apt/sources.list 也不会影响这里，保证 apt 一定能取到包列表。
 mkdir -p config/archives
-cat > config/archives/djos-security.list.chroot <<EOF
-deb $MIRROR_SEC bookworm-security main contrib non-free non-free-firmware
-EOF
-echo "    已写入安全源：$MIRROR_SEC bookworm-security"
+printf '%s\n' "$SYS_SOURCES" > config/archives/djos.list.chroot
+echo "    已写入软件源：config/archives/djos.list.chroot"
 
 mkdir -p config/includes.chroot
 cp -a "$ROOT/build/includes.chroot/." config/includes.chroot/
@@ -96,8 +100,44 @@ mkdir -p config/hooks/live
 cp "$ROOT/build/hooks/0100-djos.hook.chroot" config/hooks/live/
 chmod +x config/hooks/live/0100-djos.hook.chroot
 
-echo "==> 开始构建（首次构建需下载软件包，耗时较长）"
-lb build
+dump_apt_state() {
+    echo "---- 诊断：chroot 软件源 ----"
+    cat chroot/etc/apt/sources.list 2>/dev/null || echo "(chroot/etc/apt/sources.list 不存在)"
+    for f in chroot/etc/apt/sources.list.d/*; do
+        [ -f "$f" ] || continue
+        echo "[$f]"
+        cat "$f"
+    done
+    echo "---- 诊断：chroot apt 包列表 ----"
+    ls chroot/var/lib/apt/lists 2>/dev/null | head -20 || echo "(无)"
+    echo "---- 诊断结束 ----"
+}
+trap dump_apt_state ERR
+
+echo "==> 引导阶段 lb bootstrap"
+lb bootstrap
+
+echo "==> 校验并强制写入 chroot 软件源"
+mkdir -p chroot/etc/apt/sources.list.d
+printf '%s\n' "$SYS_SOURCES" > chroot/etc/apt/sources.list
+printf '%s\n' "$SYS_SOURCES" > chroot/etc/apt/sources.list.d/djos.list
+dump_apt_state
+
+echo "==> chroot 内预取包列表"
+chroot chroot apt-get update 2>&1 | tail -n 20 || true
+
+echo "==> chroot 阶段（安装软件包，耗时最长）"
+if ! lb chroot; then
+    echo "!! chroot 阶段失败，修正软件源后重试一次"
+    dump_apt_state
+    printf '%s\n' "$SYS_SOURCES" > chroot/etc/apt/sources.list
+    printf '%s\n' "$SYS_SOURCES" > chroot/etc/apt/sources.list.d/djos.list
+    chroot chroot apt-get update 2>&1 | tail -n 20 || true
+    lb chroot
+fi
+
+echo "==> binary 阶段（生成 ISO）"
+lb binary
 
 ISO=""
 for candidate in "live-image-amd64.hybrid.iso" "DJOS-$VERSION-amd64.hybrid.iso" \
