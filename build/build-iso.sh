@@ -158,8 +158,7 @@ EOF
 echo "==> 生成混合引导 ISO（BIOS + UEFI）"
 TARGET="$OUT/DJOS-$VERSION-amd64.iso"
 rm -f "$TARGET"
-grub-mkrescue --output="$TARGET" "$ISODIR" \
-    -- -volid "DJOS_$VERSION" -appid DJOS -publisher "DJOS Project"
+grub-mkrescue --output="$TARGET" "$ISODIR" -- -volid "DJOS_$VERSION"
 
 [ -f "$TARGET" ] || { echo "ISO 生成失败" >&2; exit 1; }
 ( cd "$OUT" && sha256sum "$(basename "$TARGET")" > "$(basename "$TARGET").sha256" )
