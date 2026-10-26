@@ -7,6 +7,8 @@ ConditionPathExists=!/var/lib/djos/.initialized
 [Service]
 Type=oneshot
 ExecStart=/usr/local/sbin/djos-firstboot
+StandardOutput=journal+console
+StandardError=journal+console
 RemainAfterExit=yes
 TimeoutStartSec=600
 

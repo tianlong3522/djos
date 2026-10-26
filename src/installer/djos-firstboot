@@ -85,7 +85,10 @@ if command -v smbpasswd >/dev/null 2>&1; then
 fi
 
 systemctl daemon-reload
-systemctl enable --now djos-api.service nginx.service >/dev/null 2>&1 || true
+# 注意：api/nginx 与本服务存在 After/Before 排序关系，若在此同步 start 会形成
+# 作业级死锁（本服务等待 api 启动，api 又等待本服务完成），只能靠超时解环。
+# 使用 --no-block 提交启动作业，由 systemd 按 After 排序自然完成。
+systemctl enable --no-block --now djos-api.service nginx.service >/dev/null 2>&1 || true
 for svc in chrony avahi-daemon smbd nmbd nfs-server docker; do
     systemctl enable --now "$svc" >/dev/null 2>&1 || true
 done

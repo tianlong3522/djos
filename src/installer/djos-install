@@ -7,6 +7,7 @@ LOG="/var/log/djos-install.log"
 CONF="/etc/djos/autoinstall.conf"
 COUNTDOWN=15
 ASSUME_YES=0
+ASSUME_FORCE=0
 TARGET_OVERRIDE="${DJOS_TARGET_DISK:-}"
 
 mkdir -p /var/log/djos
@@ -31,6 +32,7 @@ for arg in "$@"; do
     case "$arg" in
         --auto) AUTO=1 ;;
         --yes|-y) ASSUME_YES=1 ;;
+        --force) ASSUME_FORCE=1 ;;
         --target=*) TARGET_OVERRIDE="${arg#*=}" ;;
         *) ;;
     esac
@@ -71,6 +73,24 @@ SIZE_GIB=$((SIZE_BYTES / 1024 / 1024 / 1024))
 
 DISK_MODEL=$(lsblk -dn -o MODEL "$TARGET" | tr -s ' ')
 DISK_SERIAL=$(lsblk -dn -o SERIAL "$TARGET" | tr -s ' ')
+
+# 已安装检测：目标盘已有 DJOS_SYSTEM 文件系统标签时，绝不再抹盘（防止
+# PVE/BIOS 启动顺序 CD 优先时，每次从介质启动都把磁盘重装一遍）。
+if [ "$ASSUME_FORCE" -eq 0 ] && blkid -L DJOS_SYSTEM >/dev/null 2>&1; then
+    log "检测到本机已安装 DJOS（存在 DJOS_SYSTEM 分区），跳过自动安装。"
+    cat <<'EOF'
+
+  ✅ DJOS 已安装在本机磁盘，本次将从硬盘启动。
+     若仍从安装介质启动，请检查：
+       · 物理机   ：进入 BIOS 把启动顺序中的硬盘/UEFI 硬盘移到 U 盘之前，或拔下 U 盘；
+       · PVE/QEMU ：虚拟机「选项 → 启动顺序」把磁盘移到 CD/DVD 之前，或在硬件中卸载 ISO。
+     如确需强制重装，可在本介质控制台执行：djos-install --auto --force
+
+EOF
+    sleep 15
+    systemctl reboot -f 2>/dev/null || reboot -f
+    exit 0
+fi
 
 cat <<EOF
 
@@ -239,8 +259,11 @@ systemctl enable djos-api.service nginx.service >/dev/null 2>&1 || true
 for svc in ssh chrony avahi-daemon smbd nmbd nfs-server docker; do
     systemctl enable "$svc" >/dev/null 2>&1 || true
 done
+# 安装器单元位于 /etc，systemctl mask 会因目标为真实文件而拒绝，
+# 直接删除单元文件与 wants 链接，确保装好的系统里不再运行安装器。
+rm -f /etc/systemd/system/djos-installer.service
+rm -f /etc/systemd/system/multi-user.target.wants/djos-installer.service
 systemctl disable djos-installer.service >/dev/null 2>&1 || true
-systemctl mask djos-installer.service >/dev/null 2>&1 || true
 systemctl disable networking >/dev/null 2>&1 || true
 systemctl enable NetworkManager >/dev/null 2>&1 || true
 
@@ -290,6 +313,9 @@ cat <<EOF
 
   系统将在 10 秒后自动重启，此时可拔下 U 盘。
 EOF
+if systemd-detect-virt -qv 2>/dev/null; then
+    log "检测到 QEMU/PVE 虚拟机：请确保虚拟机「启动顺序」中磁盘位于 CD/DVD 之前，或重启前卸载 ISO，否则重启后会再次进入安装介质。"
+fi
 sleep 10
 sync
 systemctl reboot -f 2>/dev/null || reboot -f
