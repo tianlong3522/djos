@@ -30,9 +30,19 @@ mkdir -p "$BUILD" "$OUT"
 
 cd "$BUILD"
 echo "==> 初始化 live-build (Debian 12 bookworm / amd64)"
-lb --version || true
-# 注意：不同发行版的 live-build 版本差异较大，这里只使用各版本都支持的选项；
-# iso-hybrid + amd64 的默认引导器即为 syslinux + grub-efi（BIOS/UEFI 双引导）。
+lb --version 2>&1 | head -1 || true
+
+# 不同发行版的 live-build 版本差异较大：
+#  - 旧版会把安全源 Suite 拼成 bookworm/updates（已废弃，apt update 会 404）；
+#  - 支持 --security 的版本直接关闭该源，由我们下面自行写入正确的 bookworm-security 源。
+SEC_OPTS=""
+if lb config --help 2>/dev/null | grep -q -- '--security'; then
+    SEC_OPTS="--security false"
+    echo "    检测到 --security 选项：关闭自动安全源"
+else
+    echo "    未检测到 --security 选项：稍后修正生成的配置"
+fi
+
 lb config noauto \
     --mode debian \
     --distribution bookworm \
@@ -51,16 +61,23 @@ lb config noauto \
     --mirror-binary-security "$MIRROR_SEC" \
     --iso-application "DJOS" \
     --iso-publisher "DJOS Project" \
-    --iso-volume "DJOS $VERSION"
+    --iso-volume "DJOS $VERSION" \
+    $SEC_OPTS
 
 echo "==> 注入 DJOS 文件"
-# 旧版 live-build 会把安全源 Suite 拼成 <dist>/updates（bookworm/updates 已不存在，会 404），
-# 这里统一改为 Debian 12 实际使用的 bookworm-security。
+# 兜底：任何仍带 bookworm/updates 的配置统一改成 bookworm-security
 LBFIX=$(grep -rl 'bookworm/updates' config 2>/dev/null || true)
 if [ -n "$LBFIX" ]; then
     echo "$LBFIX" | while read -r f; do sed -i 's#bookworm/updates#bookworm-security#g' "$f"; done
     echo "    已修正安全源 Suite：$LBFIX"
 fi
+
+# 自行补一份正确的安全源（放在 config/archives 会进入 chroot 的 sources.list.d）
+mkdir -p config/archives
+cat > config/archives/djos-security.list.chroot <<EOF
+deb $MIRROR_SEC bookworm-security main contrib non-free non-free-firmware
+EOF
+echo "    已写入安全源：$MIRROR_SEC bookworm-security"
 
 mkdir -p config/includes.chroot
 cp -a "$ROOT/build/includes.chroot/." config/includes.chroot/
