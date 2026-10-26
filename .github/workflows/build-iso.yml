@@ -12,25 +12,22 @@ permissions:
 jobs:
   build:
     runs-on: ubuntu-latest
-    timeout-minutes: 90
+    timeout-minutes: 120
     steps:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Install build dependencies
+      # 直接用 Debian bookworm 容器构建，避免 Ubuntu runner 自带旧版 live-build
+      # 在安全源 Suite（bookworm/updates）等细节上不兼容。
+      - name: Build ISO in Debian bookworm container
         run: |
-          sudo apt-get update
-          sudo apt-get install -y --no-install-recommends \
-            live-build xorriso isolinux syslinux-common syslinux-efi \
-            grub-pc-bin grub-efi-amd64-bin mtools dosfstools squashfs-tools
-
-      - name: Build ISO
-        run: |
-          sudo env \
-            DJOS_MIRROR=https://deb.debian.org/debian \
-            DJOS_MIRROR_SECURITY=https://security.debian.org/debian-security \
-            bash ./build/build-iso.sh
-        shell: bash
+          mkdir -p out
+          docker build -f build/Dockerfile -t djos-builder .
+          docker run --rm --privileged \
+            -e DJOS_MIRROR="https://deb.debian.org/debian" \
+            -e DJOS_MIRROR_SECURITY="https://security.debian.org/debian-security" \
+            -v "$PWD/out:/project/out" \
+            djos-builder
 
       - name: Upload ISO
         uses: actions/upload-artifact@v4
