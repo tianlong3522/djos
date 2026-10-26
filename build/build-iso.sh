@@ -105,8 +105,9 @@ cp "$ROOT/VERSION" "$CHROOT/opt/djos/VERSION"
 
 echo "==> 执行 chroot 配置钩子"
 cp "$ROOT/build/hooks/0100-djos.hook.chroot" "$CHROOT/tmp/djos-hook.sh"
+sed -i 's/\r$//' "$CHROOT/tmp/djos-hook.sh"
 chmod +x "$CHROOT/tmp/djos-hook.sh"
-chroot "$CHROOT" /tmp/djos-hook.sh
+chroot "$CHROOT" bash /tmp/djos-hook.sh
 rm -f "$CHROOT/tmp/djos-hook.sh"
 
 echo "==> 基础系统设置"
