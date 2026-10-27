@@ -121,7 +121,8 @@ def guard():
     if user and user["must_change"]:
         allowed = (
             path.startswith("/api/auth/")
-            or path in ("/api/dashboard", "/api/system/status", "/api/system/info", "/api/health")
+            or path in ("/api/dashboard", "/api/system/status", "/api/system/info",
+                        "/api/health", "/api/system/audit")
         )
         if not allowed:
             return fail("请先修改初始管理员密码", 403, "must_change_password")

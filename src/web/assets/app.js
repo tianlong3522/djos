@@ -361,19 +361,21 @@ async function enterApp(user, csrf) {
 }
 
 function forceChangePassword() {
+    const demo = !!state.demo;
     openModal({
         title: "设置新密码",
         sub: "首次登录需要修改初始密码",
         body:
+            '<div class="field"><label>当前密码（默认 ' + (demo ? "demo" : "DJOS@2026") + '）</label><input class="input" type="password" id="np0" placeholder="留空则使用默认密码"></div>' +
             '<div class="field"><label>新密码（至少 8 位）</label><input class="input" type="password" id="np1"></div>' +
             '<div class="field"><label>确认新密码</label><input class="input" type="password" id="np2"></div>',
         buttons: [{
             label: "保存", kind: "primary", onClick: async body => {
-                const p1 = $("#np1", body).value, p2 = $("#np2", body).value;
+                const p0 = $("#np0", body).value, p1 = $("#np1", body).value, p2 = $("#np2", body).value;
                 if (p1.length < 8) throw new Error("新密码至少 8 位");
                 if (p1 !== p2) throw new Error("两次输入的密码不一致");
-                await api("/api/auth/password", { method: "POST", body: { old_password: state.user.demo ? "demo" : "DJOS@2026", new_password: p1 } });
-                state.user.must_change = false;
+                await api("/api/auth/password", { method: "POST", body: { old_password: p0 || (demo ? "demo" : "DJOS@2026"), new_password: p1 } });
+                if (state.user) state.user.must_change = false;
                 toast("密码已更新");
             }
         }]
