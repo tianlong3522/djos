@@ -1,0 +1,48 @@
+name: Build DJOS ISO
+
+on:
+  workflow_dispatch:
+  push:
+    tags:
+      - "v*"
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 120
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      # 直接用 Debian bookworm 容器构建，避免 Ubuntu runner 自带旧版 live-build
+      # 在安全源 Suite（bookworm/updates）等细节上不兼容。
+      - name: Build ISO in Debian bookworm container
+        run: |
+          mkdir -p out
+          docker build -f build/Dockerfile -t djos-builder .
+          docker run --rm --privileged \
+            -e DJOS_MIRROR="https://deb.debian.org/debian" \
+            -e DJOS_MIRROR_SECURITY="https://security.debian.org/debian-security" \
+            -v "$PWD/out:/project/out" \
+            djos-builder
+
+      - name: Upload ISO
+        uses: actions/upload-artifact@v4
+        with:
+          name: DJOS-ISO
+          path: |
+            out/*.iso
+            out/*.sha256
+          if-no-files-found: error
+          compression-level: 0
+
+      - name: Publish release asset
+        if: startsWith(github.ref, 'refs/tags/')
+        uses: softprops/action-gh-release@v2
+        with:
+          files: |
+            out/*.iso
+            out/*.sha256

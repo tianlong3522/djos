@@ -1,0 +1,14 @@
+[Unit]
+Description=DJOS First Boot Initialization
+After=local-fs.target network.target
+Before=djos-api.service nginx.service
+ConditionPathExists=!/var/lib/djos/.initialized
+
+[Service]
+Type=oneshot
+ExecStart=/usr/local/sbin/djos-firstboot
+RemainAfterExit=yes
+TimeoutStartSec=600
+
+[Install]
+WantedBy=multi-user.target

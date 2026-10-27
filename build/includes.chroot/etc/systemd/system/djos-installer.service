@@ -1,0 +1,16 @@
+[Unit]
+Description=DJOS Unattended Installer
+After=systemd-user-sessions.service
+ConditionPathExists=/run/live/medium
+Conflicts=getty@tty1.service
+
+[Service]
+Type=oneshot
+ExecStart=/usr/local/sbin/djos-install --auto
+StandardOutput=journal+console
+StandardError=journal+console
+TimeoutStartSec=0
+KillMode=none
+
+[Install]
+WantedBy=multi-user.target

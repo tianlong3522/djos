@@ -1,0 +1,177 @@
+#!/bin/bash
+# 该脚本在 Live 构建的 chroot 阶段执行，用于烘焙 DJOS 服务。
+set -e
+export DEBIAN_FRONTEND=noninteractive
+export PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
+
+mkdir -p /opt/djos /var/lib/djos /var/log/djos /volume1 /etc/djos /etc/exports.d
+chmod 755 /opt/djos
+chmod 700 /var/lib/djos
+
+install -m 0755 /opt/djos/installer/djos-install /usr/local/sbin/djos-install
+install -m 0755 /opt/djos/installer/djos-firstboot /usr/local/sbin/djos-firstboot
+chmod 0755 /opt/djos/installer/*.sh 2>/dev/null || true
+chmod -R a+rX /opt/djos/web /opt/djos/api /opt/djos/packages
+chmod 0700 /opt/djos/installer
+
+ln -sf /etc/nginx/sites-available/djos /etc/nginx/sites-enabled/djos
+rm -f /etc/nginx/sites-enabled/default
+
+if [ -f /etc/samba/smb.conf ] && ! grep -q 'djos.conf' /etc/samba/smb.conf; then
+    sed -i '/^\[global\]/a\   include = /etc/samba/djos.conf' /etc/samba/smb.conf
+fi
+touch /etc/exports.d/djos.exports
+chmod 644 /etc/exports.d/djos.exports
+
+mkdir -p /etc/docker
+if [ ! -f /etc/docker/daemon.json ]; then
+    cat > /etc/docker/daemon.json <<'EOF'
+{
+  "data-root": "/volume1/docker",
+  "log-driver": "json-file",
+  "log-opts": { "max-size": "10m", "max-file": "3" }
+}
+EOF
+fi
+
+systemctl enable djos-api.service djos-firstboot.service djos-installer.service nginx.service >/dev/null 2>&1 || true
+systemctl enable ssh chrony avahi-daemon >/dev/null 2>&1 || true
+systemctl set-default graphical.target >/dev/null 2>&1 || true
+
+# 让 Live 环境也可直接访问 Web 管理界面（若安装器未运行）
+systemctl enable djos-api.service >/dev/null 2>&1 || true
+
+# ============ 桌面环境配置 ============
+# 创建 djos 桌面用户
+if ! id djos >/dev/null 2>&1; then
+    useradd -m -d /home/djos -s /bin/bash djos
+fi
+echo "djos:DJOS@2026" | chpasswd
+usermod -aG docker djos
+# 仅允许免密执行 DJOS 安装器（最小权限原则）
+echo "djos ALL=(root) NOPASSWD: /usr/local/sbin/djos-install" > /etc/sudoers.d/djos-installer
+chmod 0440 /etc/sudoers.d/djos-installer
+
+# lightdm 自动登录 djos
+mkdir -p /etc/lightdm
+cat > /etc/lightdm/lightdm.conf <<'LIGHTDM'
+[Seat:*]
+autologin-user=djos
+autologin-user-timeout=0
+user-session=xfce
+greeter-session=lightdm-gtk-greeter
+LIGHTDM
+
+# 桌面环境变量与中文输入法
+mkdir -p /home/djos/.config
+cat > /home/djos/.xsessionrc <<'XSRC'
+export GTK_IM_MODULE=fcitx
+export QT_IM_MODULE=fcitx
+export XMODIFIERS=@im=fcitx
+export LANG=zh_CN.UTF-8
+export LC_ALL=zh_CN.UTF-8
+XSRC
+chown djos:djos /home/djos/.xsessionrc
+chmod +x /home/djos/.xsessionrc
+
+# 生成中文 locale
+sed -i 's/^# *zh_CN.UTF-8 UTF-8/zh_CN.UTF-8 UTF-8/' /etc/locale.gen 2>/dev/null || true
+locale-gen zh_CN.UTF-8 >/dev/null 2>&1 || true
+
+# XFCE 自启：Firefox kiosk 模式打开管理面板 + fcitx5
+mkdir -p /home/djos/.config/autostart
+cat > /home/djos/.config/autostart/fcitx5.desktop <<'EOF'
+[Desktop Entry]
+Type=Application
+Name=Fcitx 5
+Exec=fcitx5
+X-GNOME-Autostart-enabled=true
+EOF
+
+cat > /home/djos/.config/autostart/djos-panel.desktop <<'EOF'
+[Desktop Entry]
+Type=Application
+Name=DJOS 管理面板
+Exec=firefox-esr --kiosk http://127.0.0.1:8800
+X-GNOME-Autostart-enabled=true
+EOF
+chown -R djos:djos /home/djos/.config
+
+# 桌面安装图标：一键安装 DJOS 到硬盘
+mkdir -p /home/djos/Desktop
+cat > /home/djos/Desktop/install-djos.desktop <<'DESKTOP'
+[Desktop Entry]
+Version=1.0
+Type=Application
+Name=安装 DJOS 到硬盘
+Comment=一键将 DJOS 系统安装到本地磁盘
+Exec=xfce4-terminal --title="DJOS 安装器" -e "bash -c 'sudo /usr/local/sbin/djos-install; exec bash'"
+Icon=drive-harddisk
+Terminal=false
+Categories=System;
+DESKTOP
+chmod +x /home/djos/Desktop/install-djos.desktop
+chown djos:djos /home/djos/Desktop/install-djos.desktop
+
+# 桌面快捷方式：管理面板（非 kiosk 模式，方便调试）
+cat > /home/djos/Desktop/djos-panel.desktop <<'DESKTOP'
+[Desktop Entry]
+Version=1.0
+Type=Application
+Name=DJOS 管理面板
+Comment=打开 DJOS Web 管理界面
+Exec=firefox-esr http://127.0.0.1:8800
+Icon=preferences-system
+Terminal=false
+Categories=Network;
+DESKTOP
+chmod +x /home/djos/Desktop/djos-panel.desktop
+chown djos:djos /home/djos/Desktop/djos-panel.desktop
+
+# 桌面快捷方式：终端
+cat > /home/djos/Desktop/terminal.desktop <<'DESKTOP'
+[Desktop Entry]
+Version=1.0
+Type=Application
+Name=终端
+Comment=打开命令行终端
+Exec=xfce4-terminal
+Icon=utilities-terminal
+Terminal=false
+Categories=System;
+DESKTOP
+chmod +x /home/djos/Desktop/terminal.desktop
+chown djos:djos /home/djos/Desktop/terminal.desktop
+
+# 桌面快捷方式：文件管理器
+cat > /home/djos/Desktop/files.desktop <<'DESKTOP'
+[Desktop Entry]
+Version=1.0
+Type=Application
+Name=文件管理器
+Comment=浏览文件
+Exec=thunar
+Icon=system-file-manager
+Terminal=false
+Categories=System;
+DESKTOP
+chmod +x /home/djos/Desktop/files.desktop
+chown djos:djos /home/djos/Desktop/files.desktop
+
+# 设置桌面图标可见
+mkdir -p /home/djos/.config/xfce4/xfconf/xfce-perchannel-xml
+cat > /home/djos/.config/xfce4/xfconf/xfce-perchannel-xml/xfce4-desktop.xml <<'XML'
+<?xml version="1.0" encoding="UTF-8"?>
+<channel name="xfce4-desktop" version="1.0">
+  <property name="desktop-icons" type="empty">
+    <property name="file-icons" type="empty">
+      <property name="show-filesystem" type="bool" value="true"/>
+      <property name="show-removable" type="bool" value="true"/>
+      <property name="show-trash" type="bool" value="true"/>
+    </property>
+  </property>
+</channel>
+XML
+chown -R djos:djos /home/djos/.config/xfce4
+
+echo "DJOS hook finished"

@@ -1,0 +1,104 @@
+#!/usr/bin/env bash
+# DJOS 首次启动初始化：生成数据库、目录结构、共享配置并拉起服务。
+set -uo pipefail
+
+FLAG="/var/lib/djos/.initialized"
+LOG="/var/log/djos/firstboot.log"
+mkdir -p /var/lib/djos /var/log/djos /etc/djos
+
+exec > >(tee -a "$LOG") 2>&1
+echo "[$(date '+%F %T')] DJOS first boot begin"
+
+if [ -f "$FLAG" ]; then
+    echo "已经完成初始化，跳过。"
+    exit 0
+fi
+
+if [ -f /etc/djos/autoinstall.conf ]; then
+    # shellcheck disable=SC1090
+    . /etc/djos/autoinstall.conf
+fi
+ADMIN_USER="${DJOS_ADMIN_USER:-admin}"
+ADMIN_PASSWORD="${DJOS_ADMIN_PASSWORD:-DJOS@2026}"
+
+# 目录
+mkdir -p /volume1/{public,media,backup,downloads,appdata,docker,home,@snapshots,#recycle}
+mkdir -p /volume1/appdata/{jellyfin,qbittorrent,syncthing,code-server,nextcloud,homeassistant,adguard,portainer,duplicati,navidrome,minecraft}
+mkdir -p /volume1/media/music /volume1/media/movies /volume1/media/tv
+chmod 2775 /volume1/{public,media,backup,downloads,appdata} 2>/dev/null || true
+
+# Docker
+mkdir -p /volume1/docker /etc/docker
+cat > /etc/docker/daemon.json <<'EOF'
+{
+  "data-root": "/volume1/docker",
+  "log-driver": "json-file",
+  "log-opts": { "max-size": "10m", "max-file": "3" }
+}
+EOF
+
+# 主机名与时区
+hostnamectl set-hostname "${DJOS_HOSTNAME:-DJOS}" 2>/dev/null || true
+if [ -n "${DJOS_TIMEZONE:-}" ]; then
+    timedatectl set-timezone "$DJOS_TIMEZONE" 2>/dev/null || true
+fi
+
+# 有线网络自动 DHCP（NetworkManager）
+if command -v nmcli >/dev/null 2>&1; then
+    systemctl enable --now NetworkManager >/dev/null 2>&1 || true
+    for path in /sys/class/net/en* /sys/class/net/eth*; do
+        [ -e "$path" ] || continue
+        dev=$(basename "$path")
+        nmcli connection show "djos-$dev" >/dev/null 2>&1 && continue
+        nmcli connection add type ethernet ifname "$dev" con-name "djos-$dev" \
+            ipv4.method auto ipv6.method auto autoconnect yes >/dev/null 2>&1 || true
+        nmcli connection up "djos-$dev" >/dev/null 2>&1 || true
+    done
+fi
+
+# 数据库与共享
+cd /opt/djos/api || exit 1
+DJOS_ADMIN_PASSWORD="$ADMIN_PASSWORD" python3 - <<'PY'
+import os
+import db
+import services
+
+db.init_db()
+# 确保管理员账户密码与系统账户一致（支持 autoinstall.conf 自定义密码）
+admin_pwd = os.environ.get("DJOS_ADMIN_PASSWORD", "DJOS@2026")
+db.execute(
+    "UPDATE users SET password=?, must_change=1 WHERE username='admin'",
+    (db.hash_password(admin_pwd),),
+)
+shares = db.query("SELECT * FROM shares ORDER BY name")
+services.apply_all(shares)
+for name in ("public", "media", "backup", "downloads"):
+    path = f"/volume1/{name}"
+    try:
+        import os
+        os.makedirs(path, exist_ok=True)
+        os.chmod(path, 0o2775)
+    except OSError:
+        pass
+print("db and shares initialized")
+PY
+
+# 初始 Samba 密码
+if command -v smbpasswd >/dev/null 2>&1; then
+    if ! pdbedit -L 2>/dev/null | grep -q "^$ADMIN_USER:"; then
+        printf '%s\n%s\n' "$ADMIN_PASSWORD" "$ADMIN_PASSWORD" |
+            smbpasswd -a -s "$ADMIN_USER" >/dev/null 2>&1 || true
+    fi
+fi
+
+systemctl daemon-reload
+systemctl enable --now djos-api.service nginx.service >/dev/null 2>&1 || true
+for svc in chrony avahi-daemon smbd nmbd nfs-server docker; do
+    systemctl enable --now "$svc" >/dev/null 2>&1 || true
+done
+
+# 生成首次登录标记，API 会读取 SQLite 中的 must_change 字段
+touch "$FLAG"
+chmod 600 "$FLAG"
+
+echo "[$(date '+%F %T')] 初始化完成，管理地址 http://$(hostname -I 2>/dev/null | awk '{print $1}'):8800"

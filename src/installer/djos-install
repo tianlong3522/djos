@@ -1,0 +1,307 @@
+#!/usr/bin/env bash
+# DJOS 无人值守安装器：从 Live U 盘自动选择系统盘，分区、复制系统、安装引导并重启。
+# 设计目标：一次启动即可完成安装，全程无需键盘输入。
+set -uo pipefail
+
+LOG="/var/log/djos-install.log"
+CONF="/etc/djos/autoinstall.conf"
+COUNTDOWN=15
+ASSUME_YES=0
+TARGET_OVERRIDE="${DJOS_TARGET_DISK:-}"
+
+mkdir -p /var/log/djos
+exec > >(tee -a "$LOG") 2>&1
+
+log() { printf '[%s] %s\n' "$(date '+%H:%M:%S')" "$*"; }
+die() { log "错误：$*"; log "安装已中止，系统未做进一步修改。"; sleep 8; exit 1; }
+banner() {
+    printf '\n\033[1;36m'
+    cat <<'EOF'
+  ____     _  ___  ____
+ |  _ \   | |/ _ \/ ___|
+ | | | |  | | | | \___ \
+ | |_| |  | | |_| |___) |
+ |____/___|_|\___/|____/
+      DJOS NAS 一键安装
+EOF
+    printf '\033[0m\n'
+}
+
+for arg in "$@"; do
+    case "$arg" in
+        --auto) AUTO=1 ;;
+        --yes|-y) ASSUME_YES=1 ;;
+        --force) FORCE=1 ;;
+        --target=*) TARGET_OVERRIDE="${arg#*=}" ;;
+        *) ;;
+    esac
+done
+
+banner
+[ "$(id -u)" -eq 0 ] || die "安装器需要 root 权限"
+[ -d /run/live/medium ] || { log "当前不是 DJOS 安装介质，退出。"; exit 0; }
+
+# 已安装检测：若内部磁盘已存在 DJOS 系统分区且未指定 --force，则跳过安装直接从硬盘启动
+if [ "${FORCE:-0}" -ne 1 ]; then
+    EXISTING_SYS=$(blkid -L DJOS_SYSTEM 2>/dev/null || true)
+    if [ -n "$EXISTING_SYS" ]; then
+        log "检测到已安装的 DJOS 系统分区：$EXISTING_SYS"
+        log "跳过安装，从硬盘启动。如需重装请添加 --force 参数。"
+        exit 0
+    fi
+fi
+
+for cmd in parted mkfs.fat mkfs.ext4 mkfs.btrfs rsync grub-install blkid lsblk; do
+    command -v "$cmd" >/dev/null 2>&1 || die "缺少安装工具：$cmd"
+done
+
+if [ -f "$CONF" ]; then
+    # shellcheck disable=SC1090
+    . "$CONF"
+fi
+ADMIN_USER="${DJOS_ADMIN_USER:-admin}"
+ADMIN_PASSWORD="${DJOS_ADMIN_PASSWORD:-DJOS@2026}"
+
+log "扫描可用磁盘……"
+mapfile -t CANDIDATES < <(
+    lsblk -bdn -o NAME,TYPE,TRAN,SIZE 2>/dev/null |
+        awk '$2=="disk" && $3!="usb" {print $4" "$1}' |
+        sort -nr
+)
+
+if [ -n "$TARGET_OVERRIDE" ]; then
+    TARGET="$TARGET_OVERRIDE"
+else
+    [ "${#CANDIDATES[@]}" -gt 0 ] || die "未找到可安装的内部磁盘（已排除 USB 设备）"
+    TARGET="/dev/$(echo "${CANDIDATES[0]}" | awk '{print $2}')"
+fi
+[ -b "$TARGET" ] || die "目标磁盘 $TARGET 不存在"
+
+SIZE_BYTES=$(blockdev --getsize64 "$TARGET" 2>/dev/null || echo 0)
+SIZE_GIB=$((SIZE_BYTES / 1024 / 1024 / 1024))
+[ "$SIZE_BYTES" -ge $((24 * 1024 * 1024 * 1024)) ] || die "磁盘 $TARGET 小于 24GiB，无法安装 DJOS"
+
+DISK_MODEL=$(lsblk -dn -o MODEL "$TARGET" | tr -s ' ')
+DISK_SERIAL=$(lsblk -dn -o SERIAL "$TARGET" | tr -s ' ')
+
+cat <<EOF
+
+  目标磁盘 : $TARGET
+  型号     : ${DISK_MODEL:-未知}
+  序列号   : ${DISK_SERIAL:-未知}
+  容量     : ${SIZE_GIB} GiB
+
+  ⚠  警告：安装将清空该磁盘上的全部分区与数据，且不可恢复！
+      如需更换目标磁盘，请在 15 秒内按 Ctrl+C 中止，
+      或在本 U 盘 /etc/djos/target-disk 写入目标设备路径。
+
+EOF
+
+if [ "$ASSUME_YES" -eq 0 ]; then
+    for i in $(seq "$COUNTDOWN" -1 1); do
+        printf '\r  安装将在 %2d 秒后自动开始，按 Ctrl+C 取消……' "$i"
+        sleep 1
+    done
+    printf '\r%-70s\r' ''
+fi
+log "已确认自动安装，开始写入磁盘 $TARGET"
+
+if [ "$SIZE_GIB" -lt 50 ]; then
+    ROOT_END="20GiB"
+else
+    ROOT_END="34GiB"
+fi
+
+part() {
+    if [[ "$TARGET" =~ /dev/(nvme[0-9]+n[0-9]+|mmcblk[0-9]+)$ ]]; then
+        echo "${TARGET}p$1"
+    else
+        echo "${TARGET}$1"
+    fi
+}
+ESP_PART=$(part 1)
+BOOT_PART=$(part 2)
+SYS_PART=$(part 3)
+DATA_PART=$(part 4)
+
+log "卸载目标磁盘上的所有分区……"
+for name in $(lsblk -ln -o NAME "$TARGET" 2>/dev/null | tail -n +2); do
+    umount -f "/dev/$name" 2>/dev/null || true
+done
+swapoff -a 2>/dev/null || true
+
+log "清除旧分区表……"
+wipefs -a "$TARGET" >/dev/null 2>&1 || die "无法擦除 $TARGET"
+
+log "创建 GPT 分区（ESP / BIOS Boot / 系统 / 数据）……"
+parted -s "$TARGET" mklabel gpt || die "写入分区表失败"
+parted -s "$TARGET" mkpart ESP fat32 1MiB 513MiB || die "创建 ESP 分区失败"
+parted -s "$TARGET" set 1 esp on
+parted -s "$TARGET" mkpart BIOSBOOT 513MiB 514MiB || true
+parted -s "$TARGET" set 2 bios_grub on || true
+parted -s "$TARGET" mkpart DJOS_SYSTEM ext4 514MiB "$ROOT_END" || die "创建系统分区失败"
+parted -s "$TARGET" mkpart DJOS_DATA btrfs "$ROOT_END" 100% || die "创建数据分区失败"
+partprobe "$TARGET" 2>/dev/null || true
+sleep 1
+
+log "格式化分区……"
+mkfs.fat -F32 -n DJOS_ESP "$ESP_PART" >/dev/null || die "格式化 ESP 失败"
+mkfs.ext4 -F -L DJOS_SYSTEM "$SYS_PART" >/dev/null || die "格式化系统分区失败"
+mkfs.btrfs -f -L DJOS_DATA "$DATA_PART" >/dev/null || die "格式化数据分区失败"
+
+log "挂载目标文件系统……"
+mkdir -p /target
+mount "$SYS_PART" /target || die "挂载系统分区失败"
+mkdir -p /target/boot/efi /target/volume1 /target/proc /target/sys /target/dev /target/run /target/tmp
+mount "$ESP_PART" /target/boot/efi || die "挂载 ESP 失败"
+mount -o compress=zstd:3 "$DATA_PART" /target/volume1 || die "挂载数据分区失败"
+
+log "复制 DJOS 系统文件（约 2-5 分钟）……"
+cat >/tmp/djos-rsync-exclude <<'EOF'
+/proc
+/sys
+/dev
+/run
+/tmp
+/target
+/volume1
+/boot/efi
+/cdrom
+/media
+/mnt
+/live
+/var/lib/djos
+/var/log
+/var/tmp
+/var/cache/apt/archives
+/swapfile
+EOF
+rsync -aHAX --numeric-ids --exclude-from=/tmp/djos-rsync-exclude / /target/ ||
+    die "复制系统文件失败"
+mkdir -p /target/volume1 /target/boot/efi /target/var/lib/djos /target/var/log/djos
+
+ROOT_UUID=$(blkid -s UUID -o value "$SYS_PART" || true)
+ESP_UUID=$(blkid -s UUID -o value "$ESP_PART" || true)
+DATA_UUID=$(blkid -s UUID -o value "$DATA_PART" || true)
+[ -n "$ROOT_UUID" ] && [ -n "$DATA_UUID" ] || die "无法获取分区 UUID"
+
+cat >/target/etc/fstab <<EOF
+# DJOS 自动生成
+UUID=$ROOT_UUID  /          ext4   defaults,noatime,errors=remount-ro  0 1
+UUID=$ESP_UUID   /boot/efi  vfat   umask=0077                          0 1
+UUID=$DATA_UUID  /volume1   btrfs  defaults,noatime,compress=zstd:3    0 0
+EOF
+
+for dir in dev proc sys run; do
+    mount --bind "/$dir" "/target/$dir" || die "绑定挂载 /$dir 失败"
+done
+
+log "配置主机名、账户与系统服务……"
+cat >/target/etc/hostname <<EOF
+DJOS
+EOF
+cat >/target/etc/hosts <<EOF
+127.0.0.1   localhost
+127.0.1.1   DJOS
+::1         localhost ip6-localhost ip6-loopback
+EOF
+rm -f /target/etc/resolv.conf
+printf 'nameserver 223.5.5.5\nnameserver 1.1.1.1\n' >/target/etc/resolv.conf
+
+chroot /target /usr/bin/env DJOS_TARGET="$TARGET" \
+    DJOS_ADMIN_USER="$ADMIN_USER" DJOS_ADMIN_PASSWORD="$ADMIN_PASSWORD" \
+    /bin/bash -e <<'CHROOT'
+export DEBIAN_FRONTEND=noninteractive
+export PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
+
+# 移除 Live 环境痕迹
+userdel -r user >/dev/null 2>&1 || true
+apt-get -y purge live-boot live-boot-initramfs-tools live-tools >/dev/null 2>&1 || true
+rm -rf /etc/live /lib/live /usr/lib/live 2>/dev/null || true
+
+# 用户与用户组
+groupadd -f djos || true
+groupadd -f docker || true
+if ! id "$DJOS_ADMIN_USER" >/dev/null 2>&1; then
+    useradd -m -d "/volume1/home/$DJOS_ADMIN_USER" -s /bin/bash "$DJOS_ADMIN_USER"
+fi
+usermod -aG djos,sudo,docker "$DJOS_ADMIN_USER" 2>/dev/null || true
+echo "$DJOS_ADMIN_USER:$DJOS_ADMIN_PASSWORD" | chpasswd
+passwd -u "$DJOS_ADMIN_USER" >/dev/null 2>&1 || true
+
+mkdir -p /volume1/{public,media,backup,downloads,appdata,docker,home,@snapshots,#recycle}
+mkdir -p "/volume1/home/$DJOS_ADMIN_USER"
+chown -R "$DJOS_ADMIN_USER:$DJOS_ADMIN_USER" "/volume1/home/$DJOS_ADMIN_USER" 2>/dev/null || true
+chmod 2775 /volume1/{public,media,backup,downloads,appdata} 2>/dev/null || true
+
+# Docker 数据目录迁移至数据卷
+mkdir -p /etc/docker
+cat > /etc/docker/daemon.json <<'EOF'
+{
+  "data-root": "/volume1/docker",
+  "log-driver": "json-file",
+  "log-opts": { "max-size": "10m", "max-file": "3" }
+}
+EOF
+
+# 首次启动初始化服务
+chmod +x /usr/local/sbin/djos-firstboot 2>/dev/null || true
+systemctl enable djos-firstboot.service >/dev/null 2>&1 || true
+systemctl enable djos-api.service nginx.service >/dev/null 2>&1 || true
+for svc in ssh chrony avahi-daemon smbd nmbd nfs-server docker; do
+    systemctl enable "$svc" >/dev/null 2>&1 || true
+done
+systemctl disable djos-installer.service >/dev/null 2>&1 || true
+systemctl mask djos-installer.service >/dev/null 2>&1 || true
+systemctl disable networking >/dev/null 2>&1 || true
+systemctl enable NetworkManager >/dev/null 2>&1 || true
+
+# SSH 安全基线
+sed -i 's/^#\?PermitRootLogin .*/PermitRootLogin no/' /etc/ssh/sshd_config 2>/dev/null || true
+
+# 重新生成 initramfs 与 GRUB
+update-initramfs -u -k all >/dev/null 2>&1 || true
+GRUB_CMDLINE_LINUX_DEFAULT="quiet console=tty0"
+sed -i 's/^GRUB_TIMEOUT=.*/GRUB_TIMEOUT=3/' /etc/default/grub 2>/dev/null || true
+grep -q '^GRUB_CMDLINE_LINUX_DEFAULT' /etc/default/grub 2>/dev/null || \
+    echo 'GRUB_CMDLINE_LINUX_DEFAULT="quiet console=tty0"' >> /etc/default/grub
+grub-install --target=x86_64-efi --efi-directory=/boot/efi \
+    --bootloader-id=DJOS --removable --no-nvram >/dev/null 2>&1 || true
+grub-install --target=i386-pc "$DJOS_TARGET" >/dev/null 2>&1 || true
+update-grub >/dev/null 2>&1 || true
+
+# 清除唯一标识与日志
+truncate -s 0 /etc/machine-id 2>/dev/null || true
+rm -f /etc/ssh/ssh_host_* 2>/dev/null || true
+rm -f /var/lib/systemd/random-seed 2>/dev/null || true
+rm -rf /var/lib/djos/* /var/log/* /var/tmp/* /tmp/* 2>/dev/null || true
+mkdir -p /var/lib/djos /var/log/djos
+CHROOT
+
+if [ $? -ne 0 ]; then
+    die "系统配置阶段失败，请查看 $LOG"
+fi
+
+log "同步磁盘并卸载……"
+sync
+for dir in run sys proc dev; do
+    umount -l "/target/$dir" 2>/dev/null || true
+done
+umount -l /target/volume1 2>/dev/null || true
+umount -l /target/boot/efi 2>/dev/null || true
+umount -l /target 2>/dev/null || true
+
+cat <<EOF
+
+  ✅ DJOS 安装完成
+  ------------------------------------------------------
+  管理地址 : http://<本机IP>:8800  或 http://djos.local:8800
+  初始账户 : $ADMIN_USER
+  初始密码 : $ADMIN_PASSWORD
+  首次登录后必须修改密码。
+
+  系统将在 10 秒后自动重启，此时可拔下 U 盘。
+EOF
+sleep 10
+sync
+systemctl reboot -f 2>/dev/null || reboot -f

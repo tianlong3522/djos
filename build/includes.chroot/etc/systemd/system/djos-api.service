@@ -1,0 +1,21 @@
+[Unit]
+Description=DJOS Management API
+Documentation=https://github.com/djos-nas/djos
+After=network-online.target djos-firstboot.service
+Wants=network-online.target
+ConditionPathExists=/opt/djos/api/app.py
+
+[Service]
+Type=simple
+User=root
+Group=root
+WorkingDirectory=/opt/djos/api
+Environment=PYTHONUNBUFFERED=1
+Environment=DJOS_DB=/var/lib/djos/djos.db
+ExecStart=/usr/bin/gunicorn --workers 2 --bind 127.0.0.1:8080 --timeout 600 --graceful-timeout 30 --access-logfile - app:app
+Restart=always
+RestartSec=3
+LimitNOFILE=65535
+
+[Install]
+WantedBy=multi-user.target
