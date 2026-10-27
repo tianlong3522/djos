@@ -53,22 +53,37 @@ jobs:
           if-no-files-found: warn
           compression-level: 0
 
+      - name: Split ISO if > 1GiB (GitHub Release 单文件上限 2GiB，且镜像站有更小限制)
+        if: startsWith(github.ref, 'refs/tags/')
+        run: |
+          cd out
+          ISO=$(ls DJOS-*.iso 2>/dev/null | head -1)
+          [ -n "$ISO" ] || { echo "no iso"; exit 1; }
+          SIZE=$(stat -c%s "$ISO")
+          echo "ISO size: $SIZE bytes"
+          if [ "$SIZE" -gt 1073741824 ]; then
+            split -b 1024M -d -a 2 "$ISO" "${ISO}.part-"
+            rm -f "$ISO"
+            echo "split into parts:"
+            ls -lh "${ISO}".part-*
+          fi
+
       - name: Publish release asset (log + iso，成败都发，便于取日志)
         if: always() && startsWith(github.ref, 'refs/tags/')
-        uses: softprops/action-gh-release@v2
-        with:
-          files: |
-            build.log
-            out/*.iso
-            out/*.sha256
-          fail_on_unmatched_files: false
-
-      - name: Upload ISO
-        uses: actions/upload-artifact@v4
-        with:
-          name: DJOS-ISO
-          path: |
-            out/*.iso
-            out/*.sha256
-          if-no-files-found: error
-          compression-level: 0
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release create "$GITHUB_REF_NAME" \
+            --title "$GITHUB_REF_NAME" \
+            --notes "DJOS NAS 全量离线版 $GITHUB_REF_NAME" 2>/dev/null || true
+          OK=0
+          for i in 1 2 3 4 5; do
+            if gh release upload "$GITHUB_REF_NAME" out/* build.log --clobber; then
+              OK=1; break
+            fi
+            echo "upload attempt $i failed, retrying..."
+            sleep 20
+          done
+          [ "$OK" = 1 ] || { echo "release upload failed after retries"; exit 1; }
+          echo "== release assets =="
+          gh release view "$GITHUB_REF_NAME" --json assets --jq '.assets[].name'

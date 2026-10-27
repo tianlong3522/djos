@@ -13,12 +13,12 @@ set -euo pipefail
 
 VMID="${1:-$(pvesh get /cluster/nextid)}"
 DISK_GB="${2:-500}"
-ISO_NAME="DJOS-1.0.17-amd64.iso"
+ISO_NAME="DJOS-1.0.18-amd64.iso"
 ISO_DIR="/var/lib/vz/template/iso"
 ISO_PATH="$ISO_DIR/$ISO_NAME"
 STORAGE="local-lvm"
 MIRROR="https://gh-proxy.com/"
-URL="${MIRROR}https://github.com/tianlong3522/djos/releases/download/v1.0.17/$ISO_NAME"
+BASE_URL="https://github.com/tianlong3522/djos/releases/download/v1.0.18"
 
 echo "==> DJOS 部署: VM=$VMID 磁盘=${DISK_GB}GB 存储=$STORAGE"
 
@@ -31,15 +31,44 @@ if qm status "$VMID" >/dev/null 2>&1; then
     qm destroy "$VMID" --purge 2>/dev/null || true
 fi
 
-# 1. 获取 ISO（PVE 本地已有则直接用）
+# 1. 获取 ISO：优先单文件；超过 2GiB 的版本为分卷 part-00..NN，自动合并并校验
 mkdir -p "$ISO_DIR"
 if [ ! -s "$ISO_PATH" ]; then
-    echo "==> 下载 $ISO_NAME（约 474MB，走 gh-proxy 加速）"
-    wget -c -O "$ISO_PATH.part" "$URL"
-    mv "$ISO_PATH.part" "$ISO_PATH"
+    if wget -q --spider "${MIRROR}${BASE_URL}/$ISO_NAME"; then
+        echo "==> 下载 $ISO_NAME（约 474MB，走 gh-proxy 加速）"
+        wget -c -O "$ISO_PATH" "${MIRROR}${BASE_URL}/$ISO_NAME"
+    elif wget -q --spider "${MIRROR}${BASE_URL}/$ISO_NAME.part-00"; then
+        echo "==> 下载分卷 $ISO_NAME.part-00..NN（走 gh-proxy 加速）"
+        for n in 00 01 02 03 04 05 06 07 08 09; do
+            P="${ISO_NAME}.part-$n"
+            if ! wget -q --spider "${MIRROR}${BASE_URL}/$P"; then
+                break
+            fi
+            wget -c -O "$ISO_DIR/$P" "${MIRROR}${BASE_URL}/$P"
+        done
+        cat "$ISO_DIR/${ISO_NAME}".part-* > "$ISO_PATH"
+        rm -f "$ISO_DIR/${ISO_NAME}".part-*
+    else
+        echo "ISO 获取失败，请手动上传 $ISO_NAME 到 $ISO_DIR" >&2
+        exit 1
+    fi
 fi
-[ -s "$ISO_PATH" ] || { echo "ISO 获取失败，请手动上传到 $ISO_DIR"; exit 1; }
+[ -s "$ISO_PATH" ] || { echo "ISO 文件为空" >&2; exit 1; }
 echo "==> ISO 就绪: $ISO_PATH ($(( $(stat -c%s "$ISO_PATH") / 1024 / 1024 ))MB)"
+
+# 1.5 SHA256 校验（分卷合并后应与官方一致）
+wget -qO "$ISO_DIR/$ISO_NAME.sha256.tmp" "${MIRROR}${BASE_URL}/$ISO_NAME.sha256" || true
+if [ -s "$ISO_DIR/$ISO_NAME.sha256.tmp" ]; then
+    EXPECT=$(awk '{print $1}' "$ISO_DIR/$ISO_NAME.sha256.tmp")
+    ACTUAL=$(sha256sum "$ISO_PATH" | awk '{print $1}')
+    if [ "$EXPECT" = "$ACTUAL" ]; then
+        echo "==> SHA256 校验通过"
+    else
+        echo "SHA256 校验失败: expect=$EXPECT actual=$ACTUAL" >&2
+        exit 1
+    fi
+    rm -f "$ISO_DIR/$ISO_NAME.sha256.tmp"
+fi
 
 # 2. 创建 VM（磁盘优先、CD 兜底）
 qm create "$VMID" --name DJOS --ostype l26 \
