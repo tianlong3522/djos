@@ -178,13 +178,20 @@ cat >/tmp/djos-rsync-exclude <<'EOF'
 /media
 /mnt
 /live
+/lib/live
+/usr/lib/live
+/run/live
 /var/lib/djos
 /var/log
 /var/tmp
 /var/cache/apt/archives
 /swapfile
 EOF
-rsync -aHAX --numeric-ids --exclude-from=/tmp/djos-rsync-exclude / /target/ ||
+# -x/--one-file-system 关键：Live 环境里 /usr/lib/live/mount/*（medium/rootfs/overlay）
+# 及 /proc /sys /dev /run 都是独立挂载，不加 -x 时 rsync 会顺着挂载点把介质内容
+# 和运行时叠层一并复制，甚至形成自引用循环，瞬间撑满目标分区（No space left on device）。
+log "目标分区可用空间：$(df -h -m /target | awk 'NR==2{print $4" MiB"}')"
+rsync -aHAX --numeric-ids -x --exclude-from=/tmp/djos-rsync-exclude / /target/ ||
     die "复制系统文件失败"
 mkdir -p /target/volume1 /target/boot/efi /target/var/lib/djos /target/var/log/djos
 
