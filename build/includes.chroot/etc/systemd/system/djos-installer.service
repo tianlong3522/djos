@@ -3,7 +3,6 @@ Description=DJOS Unattended Installer
 After=systemd-user-sessions.service
 ConditionPathExists=/run/live/medium
 Conflicts=getty@tty1.service
-Conflicts=djos-api.service
 
 [Service]
 Type=oneshot

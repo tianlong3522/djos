@@ -10,6 +10,7 @@ chmod 700 /var/lib/djos
 
 install -m 0755 /opt/djos/installer/djos-install /usr/local/sbin/djos-install
 install -m 0755 /opt/djos/installer/djos-firstboot /usr/local/sbin/djos-firstboot
+install -m 0755 /opt/djos/installer/djos-install-desktop /usr/local/bin/djos-install-desktop
 chmod 0755 /opt/djos/installer/*.sh 2>/dev/null || true
 chmod -R a+rX /opt/djos/web /opt/djos/api /opt/djos/packages
 chmod 0700 /opt/djos/installer
@@ -36,7 +37,64 @@ fi
 
 systemctl enable djos-api.service djos-firstboot.service djos-installer.service nginx.service >/dev/null 2>&1 || true
 systemctl enable ssh chrony avahi-daemon >/dev/null 2>&1 || true
-systemctl set-default multi-user.target >/dev/null 2>&1 || true
+
+# ---------- 桌面环境（XFCE + 自动登录 + 面板自启动） ----------
+if ! id djos >/dev/null 2>&1; then
+    useradd -m -s /bin/bash -G sudo,netdev djos
+fi
+echo 'djos:DJOS@2026' | chpasswd
+echo 'djos ALL=(ALL) NOPASSWD:ALL' > /etc/sudoers.d/90-djos-user
+chmod 440 /etc/sudoers.d/90-djos-user
+
+getent group autologin >/dev/null 2>&1 || groupadd autologin
+usermod -aG autologin djos
+
+if [ -d /usr/share/xsessions ]; then
+    mkdir -p /etc/lightdm/lightdm.conf.d
+    cat > /etc/lightdm/lightdm.conf.d/50-djos-autologin.conf <<'EOF'
+[Seat:*]
+autologin-user=djos
+autologin-user-timeout=0
+autologin-session=xfce
+EOF
+    D=/home/djos
+    mkdir -p "$D/.config/autostart" "$D/Desktop"
+    cat > "$D/.config/autostart/djos-panel.desktop" <<'EOF'
+[Desktop Entry]
+Type=Application
+Name=DJOS 控制面板
+Exec=firefox-esr --kiosk http://localhost:8800
+Terminal=false
+X-GNOME-Autostart-enabled=true
+EOF
+    cat > "$D/Desktop/djos-panel.desktop" <<'EOF'
+[Desktop Entry]
+Type=Application
+Name=DJOS 控制面板
+Comment=打开 DJOS 管理界面
+Exec=firefox-esr --kiosk http://localhost:8800
+Icon=preferences-system-network
+Terminal=false
+Categories=System;
+EOF
+    cat > "$D/Desktop/djos-install.desktop" <<'EOF'
+[Desktop Entry]
+Type=Application
+Name=安装 DJOS 到硬盘
+Comment=把本系统安装到内置硬盘（15 秒可取消）
+Exec=/usr/local/bin/djos-install-desktop
+Icon=drive-removable-media
+Terminal=true
+Categories=System;
+EOF
+    chown -R djos:djos "$D/.config" "$D/Desktop"
+    chmod 0755 "$D"/Desktop/*.desktop "$D"/.config/autostart/*.desktop
+    systemctl set-default graphical.target >/dev/null 2>&1 || true
+    systemctl enable lightdm >/dev/null 2>&1 || true
+else
+    # 无桌面的最小构建仍用多用户目标（控制台可登录）
+    systemctl set-default multi-user.target >/dev/null 2>&1 || true
+fi
 
 # 让 Live 环境也可直接访问 Web 管理界面（若安装器未运行）
 systemctl enable djos-api.service >/dev/null 2>&1 || true

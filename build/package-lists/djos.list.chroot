@@ -86,3 +86,19 @@ grub-common
 efibootmgr
 shim-signed
 mtools
+
+# 桌面环境（XFCE + 浏览器 + 中文字体）
+xfce4
+xfce4-terminal
+thunar
+mousepad
+lightdm
+lightdm-gtk-greeter
+firefox-esr
+fonts-noto-cjk
+dbus-x11
+xserver-xorg
+x11-xserver-utils
+xfce4-notifyd
+network-manager-gnome
+policykit-1
