@@ -13,12 +13,12 @@ set -euo pipefail
 
 VMID="${1:-$(pvesh get /cluster/nextid)}"
 DISK_GB="${2:-500}"
-ISO_NAME="DJOS-1.0.16-amd64.iso"
+ISO_NAME="DJOS-1.0.17-amd64.iso"
 ISO_DIR="/var/lib/vz/template/iso"
 ISO_PATH="$ISO_DIR/$ISO_NAME"
 STORAGE="local-lvm"
 MIRROR="https://gh-proxy.com/"
-URL="${MIRROR}https://github.com/tianlong3522/djos/releases/download/v1.0.16/$ISO_NAME"
+URL="${MIRROR}https://github.com/tianlong3522/djos/releases/download/v1.0.17/$ISO_NAME"
 
 echo "==> DJOS 部署: VM=$VMID 磁盘=${DISK_GB}GB 存储=$STORAGE"
 

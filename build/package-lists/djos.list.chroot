@@ -18,7 +18,9 @@ p7zip-full
 
 # 硬件与文件系统
 mdadm
+lvm2
 btrfs-progs
+xfsprogs
 smartmontools
 nvme-cli
 hdparm
@@ -41,6 +43,18 @@ wireless-tools
 wpasupplicant
 firmware-linux
 firmware-iwlwifi
+firmware-realtek
+firmware-atheros
+firmware-mediatek
+firmware-bnx2
+firmware-bnx2x
+firmware-tg3
+firmware-qlogic
+firmware-libertas
+firmware-misc-nonfree
+firmware-amd-graphics
+firmware-intel-sound
+firmware-sof-signed
 intel-microcode
 amd64-microcode
 

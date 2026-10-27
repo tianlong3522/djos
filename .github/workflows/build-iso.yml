@@ -24,7 +24,7 @@ jobs:
             debootstrap debian-archive-keyring \
             squashfs-tools xorriso \
             grub-common grub-pc-bin grub-efi-amd64-bin \
-            mtools dosfstools ca-certificates curl
+            mtools dosfstools ca-certificates curl skopeo
 
       - name: Build ISO (teed log)
         run: |

@@ -56,7 +56,10 @@ chroot "$CHROOT" env DEBIAN_FRONTEND=noninteractive apt-get update
 
 echo "==> 解析软件包清单"
 # 固件/微码包经常因签名或元数据问题返回非零退出码，与主流程解耦
-HARD_SPLIT="firmware-linux firmware-iwlwifi intel-microcode amd64-microcode shim-signed"
+HARD_SPLIT="firmware-linux firmware-iwlwifi firmware-realtek firmware-atheros \
+firmware-mediatek firmware-bnx2 firmware-bnx2x firmware-tg3 firmware-qlogic \
+firmware-libertas firmware-misc-nonfree firmware-amd-graphics firmware-intel-sound \
+firmware-sof-signed intel-microcode amd64-microcode shim-signed"
 PKGS="$(grep -vE '^[[:space:]]*(#|$)' "$ROOT/build/package-lists/djos.list.chroot" | tr -d '\r' | tr '\n' ' ')"
 INSTALL=""
 HARD=""
@@ -103,6 +106,35 @@ cp -a "$ROOT/src/web/." "$CHROOT/opt/djos/web/"
 cp -a "$ROOT/src/installer/." "$CHROOT/opt/djos/installer/"
 cp -a "$ROOT/packages/." "$CHROOT/opt/djos/packages/"
 cp "$ROOT/VERSION" "$CHROOT/opt/djos/VERSION"
+
+echo "==> 预载套件 Docker 镜像（离线套件中心，失败不阻塞）"
+mkdir -p "$CHROOT/opt/djos/packages/images"
+if command -v skopeo >/dev/null 2>&1 && [ -f "$ROOT/packages/catalog.json" ]; then
+    while IFS='|' read -r APP IMAGE; do
+        [ -n "$APP" ] || continue
+        TAR="$CHROOT/opt/djos/packages/images/$APP.tar"
+        [ -s "$TAR" ] && continue
+        echo "    $APP <- $IMAGE"
+        for i in 1 2 3; do
+            if skopeo copy --retry-times 2 --override-os linux --override-arch amd64 \
+                "docker://$IMAGE" "docker-archive:$TAR:$IMAGE" 2>/dev/null; then
+                echo "      OK ($(( $(stat -c%s "$TAR") / 1024 / 1024 ))MB)"
+                break
+            fi
+            rm -f "$TAR"
+            echo "      第 $i 次失败，重试..."
+            sleep 5
+        done
+        [ -s "$TAR" ] || echo "      !! 跳过，套件中心将回退在线拉取"
+    done < <(python3 -c "
+import json
+c = json.load(open('$ROOT/packages/catalog.json'))
+for a in c.get('apps', []):
+    print(a['id'] + '|' + a['image'])
+")
+else
+    echo "    缺少 skopeo 或 catalog.json，跳过预载"
+fi
 
 echo "==> 执行 chroot 配置钩子"
 cp "$ROOT/build/hooks/0100-djos.hook.chroot" "$CHROOT/tmp/djos-hook.sh"

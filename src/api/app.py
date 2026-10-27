@@ -927,6 +927,33 @@ def _docker_available() -> bool:
     return system.has_command("docker")
 
 
+def _images_dir() -> Path:
+    for base in (BASE.parent / "packages", BASE.parent.parent / "packages"):
+        if (base / "images").is_dir():
+            return base / "images"
+    return BASE.parent / "packages" / "images"
+
+
+def _ensure_image(meta: dict) -> str | None:
+    """确保套件镜像在本地：优先用 ISO 内置离线镜像包，缺失时回退在线拉取。"""
+    image = str(meta.get("image", ""))
+    if not image:
+        return "套件未定义镜像"
+    code, _, _ = system.run(["docker", "image", "inspect", image], timeout=30)
+    if code == 0:
+        return None
+    tar = _images_dir() / f"{meta['id']}.tar"
+    if tar.is_file():
+        code, out, err = system.run(["docker", "load", "-i", str(tar)], timeout=1800)
+        if code == 0:
+            return None
+        return f"离线镜像加载失败：{(err or out)[-300:]}"
+    code, out, err = system.run(["docker", "pull", image], timeout=1800)
+    if code != 0:
+        return f"镜像拉取失败且无离线镜像包：{(err or out)[-300:]}"
+    return None
+
+
 def _containers() -> list[dict[str, Any]]:
     if not _docker_available():
         return []
@@ -1011,6 +1038,9 @@ def install_package(app_id: str):
     name = f"djos-{app_id}"
     if _container_exists(name):
         return fail("套件容器已存在，请先卸载", 409)
+    err = _ensure_image(meta)
+    if err:
+        return fail(err, 502)
     args = [
         "docker",
         "run",
