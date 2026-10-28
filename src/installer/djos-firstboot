@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
 # DJOS 首次启动初始化：生成数据库、目录结构、共享配置并拉起服务。
+# 本脚本被 systemd 无条件调用，通过 /var/lib/djos/.initialized 标记实现幂等。
 set -uo pipefail
 
 FLAG="/var/lib/djos/.initialized"
@@ -9,8 +10,12 @@ mkdir -p /var/lib/djos /var/log/djos /etc/djos
 exec > >(tee -a "$LOG") 2>&1
 echo "[$(date '+%F %T')] DJOS first boot begin"
 
+# 幂等：已初始化过直接退出
 if [ -f "$FLAG" ]; then
     echo "已经完成初始化，跳过。"
+    # 即使标记存在，也要确保 API/nginx 是起来的（Live 环境或安装后首次）
+    systemctl is-active --quiet djos-api.service || systemctl start djos-api.service >/dev/null 2>&1 || true
+    systemctl is-active --quiet nginx.service || systemctl start nginx.service >/dev/null 2>&1 || true
     exit 0
 fi
 
@@ -22,20 +27,22 @@ ADMIN_USER="${DJOS_ADMIN_USER:-admin}"
 ADMIN_PASSWORD="${DJOS_ADMIN_PASSWORD:-DJOS@2026}"
 
 # 目录
-mkdir -p /volume1/{public,media,backup,downloads,appdata,docker,home,@snapshots,#recycle}
-mkdir -p /volume1/appdata/{jellyfin,qbittorrent,syncthing,code-server,nextcloud,homeassistant,adguard,portainer,duplicati,navidrome,minecraft}
-mkdir -p /volume1/media/music /volume1/media/movies /volume1/media/tv
+mkdir -p /volume1/{public,media,backup,downloads,appdata,docker,home,@snapshots,#recycle} 2>/dev/null || true
+mkdir -p /volume1/appdata/{jellyfin,qbittorrent,syncthing,code-server,nextcloud,homeassistant,adguard,portainer,duplicati,navidrome,minecraft} 2>/dev/null || true
+mkdir -p /volume1/media/{music,movies,tv} 2>/dev/null || true
 chmod 2775 /volume1/{public,media,backup,downloads,appdata} 2>/dev/null || true
 
 # Docker
 mkdir -p /volume1/docker /etc/docker
-cat > /etc/docker/daemon.json <<'EOF'
+if [ ! -f /etc/docker/daemon.json ]; then
+    cat > /etc/docker/daemon.json <<'EOF'
 {
   "data-root": "/volume1/docker",
   "log-driver": "json-file",
   "log-opts": { "max-size": "10m", "max-file": "3" }
 }
 EOF
+fi
 
 # 主机名与时区
 hostnamectl set-hostname "${DJOS_HOSTNAME:-DJOS}" 2>/dev/null || true
@@ -56,12 +63,11 @@ if command -v nmcli >/dev/null 2>&1; then
     done
 fi
 
-# 数据库与共享
-cd /opt/djos/api || exit 1
-DJOS_ADMIN_PASSWORD="$ADMIN_PASSWORD" python3 - <<'PY'
+# 数据库（必须成功，否则 API 无法启动）
+echo "初始化数据库……"
+(cd /opt/djos/api && DJOS_ADMIN_PASSWORD="$ADMIN_PASSWORD" python3 - <<'PY'
 import os
 import db
-import services
 
 db.init_db()
 # 确保管理员账户密码与系统账户一致（支持 autoinstall.conf 自定义密码）
@@ -70,6 +76,29 @@ db.execute(
     "UPDATE users SET password=?, must_change=1 WHERE username='admin'",
     (db.hash_password(admin_pwd),),
 )
+print("db initialized")
+PY
+) || { echo "错误：数据库初始化失败"; exit 1; }
+
+# 初始 Samba 密码
+if command -v smbpasswd >/dev/null 2>&1; then
+    if ! pdbedit -L 2>/dev/null | grep -q "^$ADMIN_USER:"; then
+        printf '%s\n%s\n' "$ADMIN_PASSWORD" "$ADMIN_PASSWORD" |
+            smbpasswd -a -s "$ADMIN_USER" >/dev/null 2>&1 || true
+    fi
+fi
+
+# 拉起 API 和 nginx（这俩不依赖其他组件，先起）
+systemctl daemon-reload
+systemctl enable --now djos-api.service >/dev/null 2>&1 || true
+systemctl enable --now nginx.service >/dev/null 2>&1 || true
+
+# 共享/套件等可选组件（失败不阻断标记写入）
+echo "应用共享配置（失败不影响核心服务）……"
+(cd /opt/djos/api && DJOS_ADMIN_PASSWORD="$ADMIN_PASSWORD" python3 - <<'PY' 2>/dev/null || true
+import db
+import services
+
 shares = db.query("SELECT * FROM shares ORDER BY name")
 services.apply_all(shares)
 for name in ("public", "media", "backup", "downloads"):
@@ -80,19 +109,11 @@ for name in ("public", "media", "backup", "downloads"):
         os.chmod(path, 0o2775)
     except OSError:
         pass
-print("db and shares initialized")
+print("shares applied")
 PY
+)
 
-# 初始 Samba 密码
-if command -v smbpasswd >/dev/null 2>&1; then
-    if ! pdbedit -L 2>/dev/null | grep -q "^$ADMIN_USER:"; then
-        printf '%s\n%s\n' "$ADMIN_PASSWORD" "$ADMIN_PASSWORD" |
-            smbpasswd -a -s "$ADMIN_USER" >/dev/null 2>&1 || true
-    fi
-fi
-
-systemctl daemon-reload
-systemctl enable --now djos-api.service nginx.service >/dev/null 2>&1 || true
+# 其他后台服务（可选，失败不阻断）
 for svc in chrony avahi-daemon smbd nmbd nfs-server docker; do
     systemctl enable --now "$svc" >/dev/null 2>&1 || true
 done
