@@ -86,4 +86,4 @@ echo
 echo "✅ VM $VMID 已创建并启动"
 echo "   首次开机: 空盘 → 自动回落 CD → Live 环境全自动安装（约 2-5 分钟）→ 自动重启进硬盘"
 echo "   以后开机: 直接磁盘引导，CD 不再参与"
-echo "   进度查看: PVE 控制台；装完访问 http://<VM-IP>:8800（admin / DJOS@2026）"
+echo "   进度查看: PVE 控制台；装完访问 http://<VM-IP>:8800（admin / djos123）"

@@ -377,7 +377,7 @@ function forceChangePassword() {
                 if (p1.length < 8) throw new Error("新密码至少 8 位");
                 if (p1 !== p2) throw new Error("两次输入的密码不一致");
                 const isDemo = !!(state.user && state.user.demo);
-                await api("/api/auth/password", { method: "POST", body: { old_password: isDemo ? "demo" : "DJOS@2026", new_password: p1 } });
+                await api("/api/auth/password", { method: "POST", body: { old_password: isDemo ? "demo" : "djos123", new_password: p1 } });
                 if (state.user) state.user.must_change = false;
                 toast("密码已更新");
             }

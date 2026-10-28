@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # DJOS 管理员密码重置：一键将 Web 管理界面 admin 账户恢复为初始密码。
-# 用法：sudo djos-resetpw [新密码]（不带参数则重置为初始密码 DJOS@2026）
+# 用法：sudo djos-resetpw [新密码]（不带参数则重置为初始密码 djos123）
 set -e
 
 if [ "$(id -u)" -ne 0 ]; then
@@ -12,14 +12,14 @@ if [ -f /etc/djos/autoinstall.conf ]; then
     # shellcheck disable=SC1090
     . /etc/djos/autoinstall.conf
 fi
-PWD_VAL="${1:-${DJOS_ADMIN_PASSWORD:-DJOS@2026}}"
+PWD_VAL="${1:-${DJOS_ADMIN_PASSWORD:-djos123}}"
 
 cd /opt/djos/api
 DJOS_ADMIN_PASSWORD="$PWD_VAL" python3 - <<'PY'
 import os
 import db
 
-pwd = os.environ.get("DJOS_ADMIN_PASSWORD", "DJOS@2026")
+pwd = os.environ.get("DJOS_ADMIN_PASSWORD", "djos123")
 db.init_db()
 db.execute(
     "UPDATE users SET password=?, must_change=0, disabled=0 WHERE username='admin'",

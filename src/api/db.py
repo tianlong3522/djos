@@ -14,7 +14,7 @@ from typing import Any, Iterable
 DB_PATH = os.environ.get("DJOS_DB", "/var/lib/djos/djos.db")
 _LOCK = threading.RLock()
 
-DEFAULT_ADMIN_PASSWORD = "DJOS@2026"
+DEFAULT_ADMIN_PASSWORD = "djos123"
 
 SCHEMA = """
 CREATE TABLE IF NOT EXISTS users (

@@ -24,7 +24,7 @@ if [ -f /etc/djos/autoinstall.conf ]; then
     . /etc/djos/autoinstall.conf
 fi
 ADMIN_USER="${DJOS_ADMIN_USER:-admin}"
-ADMIN_PASSWORD="${DJOS_ADMIN_PASSWORD:-DJOS@2026}"
+ADMIN_PASSWORD="${DJOS_ADMIN_PASSWORD:-djos123}"
 
 # 目录
 mkdir -p /volume1/{public,media,backup,downloads,appdata,docker,home,@snapshots,#recycle} 2>/dev/null || true
@@ -71,7 +71,7 @@ import db
 
 db.init_db()
 # 确保管理员账户密码与系统账户一致（支持 autoinstall.conf 自定义密码）
-admin_pwd = os.environ.get("DJOS_ADMIN_PASSWORD", "DJOS@2026")
+admin_pwd = os.environ.get("DJOS_ADMIN_PASSWORD", "djos123")
 db.execute(
     "UPDATE users SET password=?, must_change=0 WHERE username='admin'",
     (db.hash_password(admin_pwd),),

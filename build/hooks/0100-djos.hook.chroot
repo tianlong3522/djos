@@ -47,7 +47,7 @@ systemctl enable djos-api.service >/dev/null 2>&1 || true
 if ! id djos >/dev/null 2>&1; then
     useradd -m -d /home/djos -s /bin/bash djos
 fi
-echo "djos:DJOS@2026" | chpasswd
+echo "djos:djos123" | chpasswd
 usermod -aG docker djos
 # 仅允许免密执行 DJOS 安装器（最小权限原则）
 echo "djos ALL=(root) NOPASSWD: /usr/local/sbin/djos-install" > /etc/sudoers.d/djos-installer

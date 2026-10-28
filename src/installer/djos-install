@@ -60,7 +60,7 @@ if [ -f "$CONF" ]; then
     . "$CONF"
 fi
 ADMIN_USER="${DJOS_ADMIN_USER:-admin}"
-ADMIN_PASSWORD="${DJOS_ADMIN_PASSWORD:-DJOS@2026}"
+ADMIN_PASSWORD="${DJOS_ADMIN_PASSWORD:-djos123}"
 
 log "扫描可用磁盘……"
 mapfile -t CANDIDATES < <(
