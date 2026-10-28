@@ -71,9 +71,40 @@ mapfile -t CANDIDATES < <(
 
 if [ -n "$TARGET_OVERRIDE" ]; then
     TARGET="$TARGET_OVERRIDE"
+    log "已通过参数/配置文件指定目标磁盘：$TARGET"
 else
     [ "${#CANDIDATES[@]}" -gt 0 ] || die "未找到可安装的内部磁盘（已排除 USB 设备）"
-    TARGET="/dev/$(echo "${CANDIDATES[0]}" | awk '{print $2}')"
+    if [ "${#CANDIDATES[@]}" -eq 1 ]; then
+        TARGET="/dev/$(echo "${CANDIDATES[0]}" | awk '{print $2}')"
+        log "仅检测到 1 块内部磁盘，自动选择 $TARGET"
+    elif [ ! -t 0 ]; then
+        # 非交互环境（如 systemd 拉起）退回自动模式：选最大磁盘
+        TARGET="/dev/$(echo "${CANDIDATES[0]}" | awk '{print $2}')"
+        log "非交互环境，自动选择容量最大的磁盘 $TARGET"
+    else
+        # 多块内部磁盘：列出候选让用户选择
+        log "检测到 ${#CANDIDATES[@]} 块内部磁盘，请选择安装目标："
+        printf '\n  序号  设备            容量      型号\n'
+        printf '  %s\n' '--------------------------------------------------------------'
+        i=1
+        for c in "${CANDIDATES[@]}"; do
+            sz=$(echo "$c" | awk '{print $1}')
+            nm=$(echo "$c" | awk '{print $2}')
+            model=$(lsblk -dn -o MODEL "/dev/$nm" 2>/dev/null | tr -s ' ')
+            printf '  %2d)   /dev/%-11s %5s GiB  %s\n' "$i" "$nm" "$((sz / 1024 / 1024 / 1024))" "${model:-未知型号}"
+            i=$((i + 1))
+        done
+        printf '\n  请输入序号 [1-%d]，30 秒内无输入则取消安装：' "${#CANDIDATES[@]}"
+        if ! read -r -t 30 CHOICE; then
+            printf '\n'
+            die "未在限定时间内选择磁盘，安装已取消"
+        fi
+        [[ "$CHOICE" =~ ^[0-9]+$ ]] || die "输入无效：$CHOICE"
+        [ "$CHOICE" -ge 1 ] 2>/dev/null && [ "$CHOICE" -le "${#CANDIDATES[@]}" ] || \
+            die "序号超出范围：$CHOICE（有效范围 1-${#CANDIDATES[@]}）"
+        TARGET="/dev/$(echo "${CANDIDATES[$((CHOICE - 1))]}" | awk '{print $2}')"
+        log "已选择目标磁盘：$TARGET"
+    fi
 fi
 [ -b "$TARGET" ] || die "目标磁盘 $TARGET 不存在"
 
@@ -298,7 +329,7 @@ cat <<EOF
   管理地址 : http://<本机IP>:8800  或 http://djos.local:8800
   初始账户 : $ADMIN_USER
   初始密码 : $ADMIN_PASSWORD
-  首次登录后必须修改密码。
+  提示     : 可在 Web 管理界面「用户管理」中随时修改密码。
 
   系统将在 10 秒后自动重启，此时可拔下 U 盘。
 EOF

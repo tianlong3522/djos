@@ -73,7 +73,7 @@ db.init_db()
 # 确保管理员账户密码与系统账户一致（支持 autoinstall.conf 自定义密码）
 admin_pwd = os.environ.get("DJOS_ADMIN_PASSWORD", "DJOS@2026")
 db.execute(
-    "UPDATE users SET password=?, must_change=1 WHERE username='admin'",
+    "UPDATE users SET password=?, must_change=0 WHERE username='admin'",
     (db.hash_password(admin_pwd),),
 )
 print("db initialized")

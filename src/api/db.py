@@ -104,7 +104,7 @@ def init_db() -> None:
             conn.execute(
                 "INSERT INTO users(username, password, role, must_change, created_at) "
                 "VALUES(?,?,?,?,?)",
-                ("admin", hash_password(DEFAULT_ADMIN_PASSWORD), "admin", 1, now()),
+                ("admin", hash_password(DEFAULT_ADMIN_PASSWORD), "admin", 0, now()),
             )
         defaults = {
             "hostname": "DJOS",
