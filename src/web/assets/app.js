@@ -47,6 +47,7 @@ function pctClass(p) { return p >= 90 ? "red" : p >= 75 ? "amber" : "green"; }
 
 /* ---------------------------------------------------------------- 图标 */
 const IC = {
+    grid: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="7" height="7" rx="1.5"/><rect x="14" y="3" width="7" height="7" rx="1.5"/><rect x="3" y="14" width="7" height="7" rx="1.5"/><rect x="14" y="14" width="7" height="7" rx="1.5"/></svg>',
     home: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 11l9-8 9 8"/><path d="M5 10v10h14V10"/></svg>',
     disk: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="5" width="18" height="14" rx="2"/><circle cx="12" cy="12" r="3.5"/></svg>',
     hdd: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="8" width="18" height="8" rx="2"/><path d="M7 12h.01M17 12h.01"/></svg>',
@@ -256,6 +257,9 @@ function openPalette() {
 
 /* ---------------------------------------------------------------- 导航 */
 const NAV = [
+    { title: "桌面", items: [
+        { id: "desktop", name: "应用桌面", icon: "grid" }
+    ]},
     { title: "系统", items: [
         { id: "dashboard", name: "概览", icon: "home" },
         { id: "storage", name: "存储空间", icon: "disk" },
@@ -357,7 +361,7 @@ async function enterApp(user, csrf) {
     $("#avatar").textContent = (user.username || "A").slice(0, 1).toUpperCase();
     renderNav();
     if (user.must_change) forceChangePassword();
-    go("dashboard");
+    go("desktop");
 }
 
 function forceChangePassword() {
@@ -383,6 +387,63 @@ function forceChangePassword() {
 }
 
 /* ================================================================ 视图 */
+
+/* ---------------------------------------------------------------- 应用桌面 */
+VIEWS.desktop = async view => {
+    let apps = [];
+    try { apps = (await api("/api/packages")).data.apps || []; } catch (e) {}
+    const sysApps = [
+        { name: "资源监控", icon: IC.home,   color: "linear-gradient(135deg,#ff7a7a,#e5484d)", go: "dashboard" },
+        { name: "文件管理", icon: IC.folder, color: "linear-gradient(135deg,#5aa2ff,#2f6fed)", go: "files" },
+        { name: "存储管理", icon: IC.disk,   color: "linear-gradient(135deg,#2dd4bf,#0d9488)", go: "storage" },
+        { name: "共享文件夹", icon: IC.share, color: "linear-gradient(135deg,#60c8fb,#0284c7)", go: "shares" },
+        { name: "套件中心", icon: IC.pkg,    color: "linear-gradient(135deg,#b18cff,#7c3aed)", go: "packages" },
+        { name: "Docker",   icon: IC.docker, color: "linear-gradient(135deg,#4aa8ff,#1d4ed8)", go: "docker" },
+        { name: "备份任务", icon: IC.backup, color: "linear-gradient(135deg,#4ade80,#059669)", go: "backup" },
+        { name: "用户管理", icon: IC.users,  color: "linear-gradient(135deg,#fbbf24,#d97706)", go: "users" },
+        { name: "日志中心", icon: IC.log,    color: "linear-gradient(135deg,#a3b1c6,#475569)", go: "logs" },
+        { name: "系统设置", icon: IC.gear,   color: "linear-gradient(135deg,#8296ad,#334155)", go: "settings" }
+    ];
+    view.innerHTML =
+        '<div class="desk-wrap">' +
+        '<div class="desk-head"><h1>应用桌面</h1><div class="desc">点击图标进入对应功能；套件安装并运行后，点击可直接打开套件界面</div></div>' +
+        '<div class="desk-grid" id="deskSys"></div>' +
+        '<div class="desk-sub">套 件 应 用</div>' +
+        '<div class="desk-grid" id="deskSuite"></div>' +
+        '</div>';
+    const sys = $("#deskSys", view);
+    sysApps.forEach(a => {
+        const b = document.createElement("button");
+        b.className = "desk-app";
+        b.innerHTML = '<span class="desk-tile" style="background:' + a.color + '">' + a.icon + '</span>' +
+                      '<span class="desk-name">' + a.name + '</span>';
+        b.onclick = () => go(a.go);
+        sys.appendChild(b);
+    });
+    const su = $("#deskSuite", view);
+    if (!apps.length) {
+        su.innerHTML = '<div class="desk-empty">暂无套件，前往「套件中心」安装 Jellyfin、qBittorrent 等应用</div>';
+        return;
+    }
+    apps.forEach(a => {
+        const running = a.status === "running";
+        const b = document.createElement("button");
+        b.className = "desk-app";
+        b.title = running ? "点击打开 " + a.name + " 界面" : (a.status === "not_installed" ? "未安装，点击前往套件中心" : "已停止，点击前往套件中心启动");
+        b.innerHTML = '<span class="desk-tile" style="background:linear-gradient(135deg,' + (a.color || "#64748b") + ',' + (a.color || "#64748b") + 'cc)">' +
+                      '<span class="desk-glyph">' + esc(a.icon || "AP") + '</span>' +
+                      '<span class="desk-dot' + (running ? "" : " off") + '"></span></span>' +
+                      '<span class="desk-name">' + esc(a.name) + '</span>';
+        b.onclick = () => {
+            if (running && a.web_port) {
+                window.open(location.protocol + "//" + location.hostname + ":" + a.web_port, "_blank");
+            } else {
+                go("packages");
+            }
+        };
+        su.appendChild(b);
+    });
+};
 
 /* ---------------------------------------------------------------- 概览 */
 VIEWS.dashboard = async view => {
