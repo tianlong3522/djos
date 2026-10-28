@@ -1,8 +1,7 @@
 [Unit]
 Description=DJOS First Boot Initialization
 After=local-fs.target network.target
-Before=djos-api.service nginx.service
-ConditionPathExists=!/var/lib/djos/.initialized
+Wants=network.target
 
 [Service]
 Type=oneshot

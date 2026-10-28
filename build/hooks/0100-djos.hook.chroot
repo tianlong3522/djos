@@ -52,9 +52,9 @@ usermod -aG docker djos
 echo "djos ALL=(root) NOPASSWD: /usr/local/sbin/djos-install" > /etc/sudoers.d/djos-installer
 chmod 0440 /etc/sudoers.d/djos-installer
 
-# lightdm 自动登录 djos
-mkdir -p /etc/lightdm
-cat > /etc/lightdm/lightdm.conf <<'LIGHTDM'
+# lightdm 自动登录 djos（安全方式：写 lightdm.conf.d 子目录，避免覆盖主配置）
+mkdir -p /etc/lightdm/lightdm.conf.d
+cat > /etc/lightdm/lightdm.conf.d/50-djos-autologin.conf <<'LIGHTDM'
 [Seat:*]
 autologin-user=djos
 autologin-user-timeout=0
@@ -92,7 +92,7 @@ cat > /home/djos/.config/autostart/djos-panel.desktop <<'EOF'
 [Desktop Entry]
 Type=Application
 Name=DJOS 管理面板
-Exec=firefox-esr --kiosk http://127.0.0.1:8800
+Exec=bash -c 'for i in $(seq 1 30); do curl -sf http://127.0.0.1:8800/api/health >/dev/null 2>&1 && break; sleep 1; done; exec firefox-esr --kiosk http://127.0.0.1:8800'
 X-GNOME-Autostart-enabled=true
 EOF
 chown -R djos:djos /home/djos/.config

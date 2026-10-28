@@ -1,7 +1,7 @@
 [Unit]
 Description=DJOS Management API
 Documentation=https://github.com/djos-nas/djos
-After=network-online.target djos-firstboot.service
+After=network-online.target
 Wants=network-online.target
 ConditionPathExists=/opt/djos/api/app.py
 
