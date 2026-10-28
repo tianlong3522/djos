@@ -10,6 +10,7 @@ chmod 700 /var/lib/djos
 
 install -m 0755 /opt/djos/installer/djos-install /usr/local/sbin/djos-install
 install -m 0755 /opt/djos/installer/djos-firstboot /usr/local/sbin/djos-firstboot
+install -m 0755 /opt/djos/installer/djos-resetpw /usr/local/sbin/djos-resetpw
 chmod 0755 /opt/djos/installer/*.sh 2>/dev/null || true
 chmod -R a+rX /opt/djos/web /opt/djos/api /opt/djos/packages
 chmod 0700 /opt/djos/installer

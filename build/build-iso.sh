@@ -100,6 +100,21 @@ mkdir -p config/hooks/live
 cp "$ROOT/build/hooks/0100-djos.hook.chroot" config/hooks/live/
 chmod +x config/hooks/live/0100-djos.hook.chroot
 
+mkdir -p config/hooks/binary
+cp "$ROOT/build/hooks/0500-grub-timeout.hook.binary" config/hooks/binary/
+chmod +x config/hooks/binary/0500-grub-timeout.hook.binary
+
+# 引导菜单超时：live-build 默认无限等待，导致开机卡在 GRUB 菜单。
+# 主保险：直接修改构建机 live-build 模板（无论字面量还是变量占位，统一改成 5 秒）。
+LB_TPL="/usr/share/live/build/bootloaders"
+if [ -d "$LB_TPL" ]; then
+    find "$LB_TPL" -type f \( -name 'grub.cfg*' -o -name '*.in' \) -print0 |
+        xargs -0 -r sed -i -E 's/^set timeout=.*/set timeout=5/; s/\$\{LB_BOOTLOADERS_TIMEOUT\}/5/g' || true
+    echo "    已将 live-build 引导模板 timeout 设为 5 秒"
+else
+    echo "    未找到 $LB_TPL（依赖 binary hook 兜底）"
+fi
+
 dump_apt_state() {
     echo "---- 诊断：chroot 软件源 ----"
     cat chroot/etc/apt/sources.list 2>/dev/null || echo "(chroot/etc/apt/sources.list 不存在)"

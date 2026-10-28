@@ -1,0 +1,12 @@
+#!/bin/sh
+# binary 阶段 hook：引导菜单 5 秒倒计时自动进入 Live 系统。
+# live-build 默认 grub 菜单无限等待（timeout=-1），导致开机卡在菜单。
+# 本 hook 在 lb binary 过程中修改已渲染的 grub.cfg（双保险，主保险见 build-iso.sh 的模板预处理）。
+set -e
+
+for f in binary/boot/grub/grub.cfg binary/boot/grub-pc/grub.cfg binary/boot/grub-efi/grub.cfg; do
+    if [ -f "$f" ]; then
+        sed -i -E 's/^set timeout=.*/set timeout=5/' "$f" || true
+        echo "grub timeout=5 已写入 $f"
+    fi
+done

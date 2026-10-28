@@ -38,11 +38,11 @@
             <form id="loginForm" autocomplete="on">
                 <div class="field">
                     <label for="username">用户名</label>
-                    <input id="username" name="username" class="input" type="text" autocomplete="username" placeholder="admin" required>
+                    <input id="username" name="username" class="input" type="text" autocomplete="username" placeholder="admin" value="admin" required>
                 </div>
                 <div class="field">
                     <label for="password">密码</label>
-                    <input id="password" name="password" class="input" type="password" autocomplete="current-password" placeholder="请输入密码" required>
+                    <input id="password" name="password" class="input" type="password" autocomplete="current-password" placeholder="请输入密码" value="DJOS@2026" required>
                 </div>
                 <button class="btn primary" type="submit" id="loginBtn">登 录</button>
             </form>
@@ -50,8 +50,8 @@
                 还没有设备？<button type="button" id="demoBtn">进入界面演示</button>
             </div>
             <div class="login-meta">
-                <span>首次安装的初始密码请见安装完成页</span>
-                <span>v1.0.0</span>
+                <span>初始账号 admin · 初始密码 DJOS@2026（已自动填入，登录后可修改）</span>
+                <span id="verTag">v1.2.4</span>
             </div>
         </section>
     </div>
