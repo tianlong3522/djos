@@ -572,3 +572,22 @@ td.actions .btn { margin-left: 4px; }
     .table th, .table td { padding: 10px; }
 }
 .mobile-toggle { display: none; }
+
+/* ------------------------------------------------------------------ 应用桌面 */
+.desk-wrap { max-width: 980px; margin: 0 auto; padding: 8px 4px 40px; }
+.desk-head h1 { font-size: 20px; margin: 10px 0 2px; }
+.desk-head .desc { color: #8b93a7; font-size: 12.5px; margin-bottom: 24px; }
+.desk-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(104px, 1fr)); gap: 18px 10px; }
+.desk-app { background: none; border: 0; cursor: pointer; display: flex; flex-direction: column; align-items: center; gap: 8px; padding: 10px 4px; border-radius: 14px; transition: background .15s, transform .1s; font-family: inherit; }
+.desk-app:hover { background: rgba(127,140,170,.14); transform: translateY(-2px); }
+.desk-app:active { transform: translateY(0); }
+.desk-tile { width: 72px; height: 72px; border-radius: 22px; display: flex; align-items: center; justify-content: center; color: #fff; position: relative; box-shadow: 0 10px 22px rgba(6,14,40,.42), inset 0 1.5px 0 rgba(255,255,255,.35); }
+.desk-tile::before { content: ""; position: absolute; inset: 0; border-radius: inherit; background: linear-gradient(180deg, rgba(255,255,255,.34), rgba(255,255,255,.05) 46%, rgba(0,0,0,.12)); z-index: 1; pointer-events: none; }
+.desk-tile svg, .desk-tile .desk-glyph { position: relative; z-index: 2; }
+.desk-tile svg { width: 38px; height: 38px; filter: drop-shadow(0 1.5px 2px rgba(10,20,50,.28)); }
+.desk-glyph { font-size: 22px; font-weight: 800; letter-spacing: .5px; text-shadow: 0 1.5px 2px rgba(10,20,50,.28); }
+.desk-dot { position: absolute; right: 6px; bottom: 6px; width: 11px; height: 11px; border-radius: 50%; background: #22c55e; border: 2px solid rgba(255,255,255,.92); z-index: 3; box-shadow: 0 1px 3px rgba(0,0,0,.35); }
+.desk-dot.off { background: #94a3b8; }
+.desk-name { font-size: 12.5px; color: #dbe2ee; text-shadow: 0 1px 2px rgba(0,0,0,.4); }
+.desk-sub { margin: 28px 0 12px; font-size: 13px; font-weight: 600; color: #8b93a7; letter-spacing: 2px; }
+.desk-empty { color: #8b93a7; font-size: 13px; padding: 18px; border: 1px dashed rgba(127,140,170,.35); border-radius: 12px; }

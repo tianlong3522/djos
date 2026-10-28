@@ -47,6 +47,7 @@ function pctClass(p) { return p >= 90 ? "red" : p >= 75 ? "amber" : "green"; }
 
 /* ---------------------------------------------------------------- 图标 */
 const IC = {
+    grid: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="7" height="7" rx="1.5"/><rect x="14" y="3" width="7" height="7" rx="1.5"/><rect x="3" y="14" width="7" height="7" rx="1.5"/><rect x="14" y="14" width="7" height="7" rx="1.5"/></svg>',
     home: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 11l9-8 9 8"/><path d="M5 10v10h14V10"/></svg>',
     disk: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="5" width="18" height="14" rx="2"/><circle cx="12" cy="12" r="3.5"/></svg>',
     hdd: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="8" width="18" height="8" rx="2"/><path d="M7 12h.01M17 12h.01"/></svg>',
@@ -256,6 +257,9 @@ function openPalette() {
 
 /* ---------------------------------------------------------------- 导航 */
 const NAV = [
+    { title: "桌面", items: [
+        { id: "desktop", name: "应用桌面", icon: "grid" }
+    ]},
     { title: "系统", items: [
         { id: "dashboard", name: "概览", icon: "home" },
         { id: "storage", name: "存储空间", icon: "disk" },
@@ -357,7 +361,7 @@ async function enterApp(user, csrf) {
     $("#avatar").textContent = (user.username || "A").slice(0, 1).toUpperCase();
     renderNav();
     if (user.must_change) forceChangePassword();
-    go("dashboard");
+    go("desktop");
 }
 
 function forceChangePassword() {
@@ -382,6 +386,111 @@ function forceChangePassword() {
 }
 
 /* ================================================================ 视图 */
+
+/* ---------------------------------------------------------------- 应用桌面 */
+function mixHex(a, b, r) {
+    const p = h => { h = h.replace("#", ""); if (h.length === 3) h = h.split("").map(c => c + c).join(""); return [parseInt(h.slice(0, 2), 16), parseInt(h.slice(2, 4), 16), parseInt(h.slice(4, 6), 16)]; };
+    const A = p(a), B = p(b);
+    return "#" + A.map((v, i) => Math.round(v + (B[i] - v) * r).toString(16).padStart(2, "0")).join("");
+}
+const tint = (hex, r) => mixHex(hex, "#ffffff", r);
+const shade = (hex, r) => mixHex(hex, "#000000", r);
+const grad = hex => "linear-gradient(140deg," + tint(hex, .38) + " 0%," + hex + " 55%," + shade(hex, .2) + " 100%)";
+
+/* 实心白色图形图标（fnOS 风格） */
+const DG = {
+    gauge: '<svg viewBox="0 0 24 24" fill="#fff"><path d="M7.12 18.46A8.5 8.5 0 1 1 16.88 18.46L15.33 16.25A5.8 5.8 0 1 0 8.67 16.25Z"/><circle cx="12" cy="11.5" r="2.2"/><rect x="11.15" y="4.2" width="1.7" height="6.2" rx=".85" transform="rotate(38 12 11.5)"/></svg>',
+    folder: '<svg viewBox="0 0 24 24" fill="#fff"><path d="M3.2 7.1A2.1 2.1 0 0 1 5.3 5h3.9c.56 0 1.1.22 1.49.62L12.2 7.1h6.5A2.1 2.1 0 0 1 20.8 9.2v.9H3.2z" opacity=".82"/><path d="M3.2 10.9h17.6v6A2.1 2.1 0 0 1 18.7 19H5.3a2.1 2.1 0 0 1-2.1-2.1z"/></svg>',
+    folderShared: '<svg viewBox="0 0 24 24" fill="#fff"><path d="M20 6h-8l-2-2H4c-1.1 0-1.99.9-1.99 2L2 18c0 1.1.9 2 2 2h16c1.1 0 2-.9 2-2V8c0-1.1-.9-2-2-2zm-5 3c1.1 0 2 .9 2 2s-.9 2-2 2-2-.9-2-2 .9-2 2-2zm4 8h-8v-1c0-1.33 2.67-2 4-2s4 .67 4 2v1z"/></svg>',
+    db: '<svg viewBox="0 0 24 24" fill="#fff"><ellipse cx="12" cy="5.8" rx="7.4" ry="2.9"/><path d="M4.6 5.8v4.5c0 1.6 3.31 2.9 7.4 2.9s7.4-1.3 7.4-2.9V5.8c0 1.6-3.31 2.9-7.4 2.9S4.6 7.4 4.6 5.8z" opacity=".85"/><path d="M4.6 12.6v4.5c0 1.6 3.31 2.9 7.4 2.9s7.4-1.3 7.4-2.9v-4.5c0 1.6-3.31 2.9-7.4 2.9s-7.4-1.3-7.4-2.9z" opacity=".7"/></svg>',
+    bag: '<svg viewBox="0 0 24 24" fill="#fff"><path d="M6.8 8.6h10.4l-.75 9.4A2.4 2.4 0 0 1 14.06 20.2H9.94a2.4 2.4 0 0 1-2.39-2.2z"/><path d="M8.9 8.4V7.6a3.1 3.1 0 0 1 6.2 0v.8" fill="none" stroke="#fff" stroke-width="1.9" stroke-linecap="round"/></svg>',
+    whale: '<svg viewBox="0 0 24 24" fill="#fff"><rect x="4.6" y="10.2" width="3.1" height="3.1" rx=".5"/><rect x="8.3" y="10.2" width="3.1" height="3.1" rx=".5"/><rect x="12" y="10.2" width="3.1" height="3.1" rx=".5"/><rect x="8.3" y="6.5" width="3.1" height="3.1" rx=".5"/><path d="M3.2 14h17.4c.6 0 1 .55.85 1.13-.55 2.05-2.05 3.35-4.25 3.95-1.7.47-3.5.62-5.2.62-1.85 0-3.75-.2-5.35-.85C4.75 18.1 3.5 16.5 3.35 15c-.06-.55.35-1 .85-1z"/></svg>',
+    sync: '<svg viewBox="0 0 24 24" fill="#fff"><path d="M12 4V1L8 5l4 4V6c3.31 0 6 2.69 6 6 0 1.01-.25 1.97-.7 2.8l1.46 1.46C19.54 15.03 20 13.57 20 12c0-4.42-3.58-8-8-8zm0 14c-3.31 0-6-2.69-6-6 0-1.01.25-1.97.7-2.8L5.24 7.74C4.46 8.97 4 10.43 4 12c0 4.42 3.58 8 8 8v3l4-4-4-4v3z"/></svg>',
+    person: '<svg viewBox="0 0 24 24" fill="#fff"><path d="M12 12c2.21 0 4-1.79 4-4s-1.79-4-4-4-4 1.79-4 4 1.79 4 4 4zm0 2c-2.67 0-8 1.34-8 4v2h16v-2c0-2.66-5.33-4-8-4z"/></svg>',
+    doc: '<svg viewBox="0 0 24 24" fill="#fff"><path d="M14 2H6c-1.1 0-1.99.9-1.99 2L4 20c0 1.1.89 2 1.99 2H18c1.1 0 2-.9 2-2V8l-6-6zm2 16H8v-2h8v2zm0-4H8v-2h8v2zm-3-5V3.5L18.5 9H13z"/></svg>',
+    gear: '<svg viewBox="0 0 24 24" fill="#fff"><path d="M19.14 12.94c.04-.3.06-.61.06-.94 0-.32-.02-.64-.07-.94l2.03-1.58c.18-.14.23-.41.12-.61l-1.92-3.32c-.12-.22-.37-.29-.59-.22l-2.39.96c-.5-.38-1.03-.7-1.62-.94L14.4 2.81c-.04-.24-.24-.41-.48-.41h-3.84c-.24 0-.43.17-.47.41L9.25 5.35C8.66 5.59 8.12 5.92 7.63 6.29L5.24 5.33c-.22-.08-.47 0-.59.22L2.74 8.87c-.12.21-.08.47.12.61l2.03 1.58c-.05.3-.09.63-.09.94s.02.64.07.94l-2.03 1.58c-.18.14-.23.41-.12.61l1.92 3.32c.12.22.37.29.59.22l2.39-.96c.5.38 1.03.7 1.62.94l.36 2.54c.05.24.24.41.48.41h3.84c.24 0 .44-.17.47-.41l.36-2.54c.59-.24 1.13-.56 1.62-.94l2.39.96c.22.08.47 0 .59-.22l1.92-3.32c.12-.22.07-.47-.12-.61l-2.01-1.58zM12 15.6c-1.98 0-3.6-1.62-3.6-3.6s1.62-3.6 3.6-3.6 3.6 1.62 3.6 3.6-1.62 3.6-3.6 3.6z"/></svg>',
+    play: '<svg viewBox="0 0 24 24" fill="#fff"><path d="M8.8 5.6v12.8c0 .94 1.04 1.5 1.82.99l9.9-6.4a1.18 1.18 0 0 0 0-1.98l-9.9-6.4A1.18 1.18 0 0 0 8.8 5.6z"/></svg>',
+    down: '<svg viewBox="0 0 24 24" fill="#fff"><path d="M19 9h-4V3H9v6H5l7 7 7-7zM5 18v2h14v-2H5z"/></svg>',
+    cloud: '<svg viewBox="0 0 24 24" fill="#fff"><path d="M19.35 10.04C18.67 6.59 15.64 4 12 4 9.11 4 6.6 5.64 5.35 8.04 2.34 8.36 0 10.91 0 14c0 3.31 2.69 6 6 6h13c2.76 0 5-2.24 5-5 0-2.64-2.05-4.78-4.65-4.96z"/></svg>',
+    cloudUp: '<svg viewBox="0 0 24 24" fill="#fff"><path d="M19.35 10.04C18.67 6.59 15.64 4 12 4 9.11 4 6.6 5.64 5.35 8.04 2.34 8.36 0 10.91 0 14c0 3.31 2.69 6 6 6h13c2.76 0 5-2.24 5-5 0-2.64-2.05-4.78-4.65-4.96zM14 13v4h-4v-4H7l5-5 5 5h-3z"/></svg>',
+    shield: '<svg viewBox="0 0 24 24" fill="#fff"><path d="M12 1.7L4 5v6.1c0 5.06 3.41 9.77 8 11.2 4.59-1.43 8-6.14 8-11.2V5l-8-3.3z"/><path d="M9.8 16.4l-4-4 1.4-1.4 2.6 2.6 6.6-6.6 1.4 1.4z" fill="#000" fill-opacity=".22"/></svg>',
+    home: '<svg viewBox="0 0 24 24" fill="#fff"><path d="M10 20v-6h4v6h5v-8h3L12 3 2 12h3v8z"/></svg>',
+    code: '<svg viewBox="0 0 24 24" fill="#fff"><path d="M9.4 16.6L4.8 12l4.6-4.6L8 6l-6 6 6 6 1.4-1.4zm5.2 0l4.6-4.6-4.6-4.6L16 6l6 6-6 6-1.4-1.4z"/></svg>',
+    music: '<svg viewBox="0 0 24 24" fill="#fff"><path d="M12 3v10.55c-.59-.34-1.27-.55-2-.55-2.21 0-4 1.79-4 4s1.79 4 4 4 4-1.79 4-4V7h4V3h-6z"/></svg>',
+    layers: '<svg viewBox="0 0 24 24" fill="#fff"><path d="M11.99 18.54l-7.37-5.73L3 14.07l9 7 9-7-1.63-1.27-7.38 5.74zM12 16l7.36-5.73L21 9l-9-7-9 7 1.63 1.27L12 16z"/></svg>',
+    cube: '<svg viewBox="0 0 24 24" fill="#fff"><path d="M12 2.6L21.2 7.5 12 12.4 2.8 7.5z"/><path d="M2.8 7.5L12 12.4v8.9l-9.2-4.9z" opacity=".72"/><path d="M21.2 7.5L12 12.4v8.9l9.2-4.9z" opacity=".5"/></svg>'
+};
+
+VIEWS.desktop = async view => {
+    let apps = [];
+    try { apps = (await api("/api/packages")).data.apps || []; } catch (e) {}
+    const sysApps = [
+        { name: "资源监控", g: DG.gauge, c: "#10b981", go: "dashboard" },
+        { name: "文件管理", g: DG.folder, c: "#38bdf8", go: "files" },
+        { name: "存储管理", g: DG.db, c: "#f97316", go: "storage" },
+        { name: "共享文件夹", g: DG.folderShared, c: "#0ea5e9", go: "shares" },
+        { name: "套件中心", g: DG.bag, c: "#8b5cf6", go: "packages" },
+        { name: "Docker", g: DG.whale, c: "#2563eb", go: "docker" },
+        { name: "备份任务", g: DG.sync, c: "#14b8a6", go: "backup" },
+        { name: "用户管理", g: DG.person, c: "#f59e0b", go: "users" },
+        { name: "日志中心", g: DG.doc, c: "#64748b", go: "logs" },
+        { name: "系统设置", g: DG.gear, c: "#6b7280", go: "settings" }
+    ];
+    const SUITE = {
+        jellyfin: { g: DG.play, c: "#ef4444" },
+        qbittorrent: { g: DG.down, c: "#14b8a6" },
+        syncthing: { g: DG.sync, c: "#0e9f6e" },
+        "code-server": { g: DG.code, c: "#0b74d9" },
+        nextcloud: { g: DG.cloud, c: "#0082c9" },
+        "home-assistant": { g: DG.home, c: "#18b6ec" },
+        "adguard-home": { g: DG.shield, c: "#16a34a" },
+        portainer: { g: DG.layers, c: "#13b5ea" },
+        duplicati: { g: DG.cloudUp, c: "#e0245e" },
+        navidrome: { g: DG.music, c: "#f59e0b" },
+        minecraft: { g: DG.cube, c: "#3c8527" }
+    };
+    view.innerHTML =
+        '<div class="desk-wrap">' +
+        '<div class="desk-head"><h1>应用桌面</h1><div class="desc">点击图标进入对应功能；套件安装并运行后，点击可直接打开套件界面</div></div>' +
+        '<div class="desk-grid" id="deskSys"></div>' +
+        '<div class="desk-sub">套 件 应 用</div>' +
+        '<div class="desk-grid" id="deskSuite"></div>' +
+        '</div>';
+    const sys = $("#deskSys", view);
+    sysApps.forEach(a => {
+        const b = document.createElement("button");
+        b.className = "desk-app";
+        b.innerHTML = '<span class="desk-tile" style="background:' + grad(a.c) + '">' + a.g + '</span>' +
+                      '<span class="desk-name">' + a.name + '</span>';
+        b.onclick = () => go(a.go);
+        sys.appendChild(b);
+    });
+    const su = $("#deskSuite", view);
+    if (!apps.length) {
+        su.innerHTML = '<div class="desk-empty">暂无套件，前往「套件中心」安装 Jellyfin、qBittorrent 等应用</div>';
+        return;
+    }
+    apps.forEach(a => {
+        const running = a.status === "running";
+        const s = SUITE[a.id] || null;
+        const base = s ? s.c : (a.color || "#64748b");
+        const glyph = s ? s.g : '<span class="desk-glyph">' + esc(a.icon || (a.name || "AP").slice(0, 2).toUpperCase()) + '</span>';
+        const b = document.createElement("button");
+        b.className = "desk-app";
+        b.title = running ? "点击打开 " + a.name + " 界面" : (a.status === "not_installed" ? "未安装，点击前往套件中心" : "已停止，点击前往套件中心启动");
+        b.innerHTML = '<span class="desk-tile" style="background:' + grad(base) + '">' + glyph +
+                      '<span class="desk-dot' + (running ? "" : " off") + '"></span></span>' +
+                      '<span class="desk-name">' + esc(a.name) + '</span>';
+        b.onclick = () => {
+            if (running && a.web_port) {
+                window.open(location.protocol + "//" + location.hostname + ":" + a.web_port, "_blank");
+            } else {
+                go("packages");
+            }
+        };
+        su.appendChild(b);
+    });
+};
 
 /* ---------------------------------------------------------------- 概览 */
 VIEWS.dashboard = async view => {
