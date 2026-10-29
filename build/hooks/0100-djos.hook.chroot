@@ -53,8 +53,16 @@ usermod -aG docker djos
 echo "djos ALL=(root) NOPASSWD: /usr/local/sbin/djos-install" > /etc/sudoers.d/djos-installer
 chmod 0440 /etc/sudoers.d/djos-installer
 
-# lightdm 自动登录 djos（安全方式：写 lightdm.conf.d 子目录，避免覆盖主配置）
+# lightdm 自动登录 djos：同时写主配置文件（最高优先级）与 conf.d（双保险）。
+# live-config 可能依赖 boot 参数管理 autologin，主文件确保覆盖一切。
 mkdir -p /etc/lightdm/lightdm.conf.d
+cat > /etc/lightdm/lightdm.conf <<'LIGHTDM'
+[Seat:*]
+autologin-user=djos
+autologin-user-timeout=0
+user-session=xfce
+greeter-session=lightdm-gtk-greeter
+LIGHTDM
 cat > /etc/lightdm/lightdm.conf.d/50-djos-autologin.conf <<'LIGHTDM'
 [Seat:*]
 autologin-user=djos

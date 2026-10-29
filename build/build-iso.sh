@@ -58,7 +58,7 @@ lb config noauto \
     --initsystem systemd \
     --memtest none \
     --linux-flavours amd64 \
-    --bootappend-live "boot=live components quiet loglevel=3 console=tty0" \
+    --bootappend-live "boot=live components quiet loglevel=3 console=tty0 live-config.autologin=lightdm live-config.username=djos" \
     --mirror-bootstrap "$MIRROR" \
     --mirror-chroot "$MIRROR" \
     --mirror-chroot-security "$MIRROR_SEC" \
@@ -169,6 +169,19 @@ fi
     echo "构建完成但未找到 ISO 文件" >&2
     exit 1
 }
+
+echo "==> 修正引导菜单超时（5 秒自动进入 Live）"
+# live-build 生成的 grub 菜单默认无限等待；模板 sed 与 binary hook 均不可靠，
+# 因此直接对生成的 ISO 就地更新 grub.cfg（xorriso 就地修改保留引导记录）。
+xorriso -osirrox on -indev "$ISO" -extract /boot/grub/grub.cfg /tmp/djos-grub.cfg >/dev/null 2>&1 || true
+if [ -f /tmp/djos-grub.cfg ]; then
+    grep -n "set timeout" /tmp/djos-grub.cfg || true
+    sed -i -E 's/^set timeout=.*/set timeout=5/' /tmp/djos-grub.cfg
+    xorriso -indev "$ISO" -outdev "$ISO" -update /tmp/djos-grub.cfg /boot/grub/grub.cfg && echo "    grub timeout=5 已写入 ISO" || echo "    grub.cfg 更新失败（引导菜单需手选）"
+    rm -f /tmp/djos-grub.cfg
+else
+    echo "    ISO 内未找到 /boot/grub/grub.cfg，跳过"
+fi
 
 TARGET="$OUT/DJOS-$VERSION-amd64.iso"
 mv "$ISO" "$TARGET"
