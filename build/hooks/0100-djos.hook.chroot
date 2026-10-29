@@ -1,4 +1,4 @@
-#!/bin/bash
+﻿#!/bin/bash
 # 该脚本在 Live 构建的 chroot 阶段执行，用于烘焙 DJOS 服务。
 set -e
 export DEBIAN_FRONTEND=noninteractive
@@ -117,6 +117,7 @@ Comment=一键将 DJOS 系统安装到本地磁盘
 Exec=xfce4-terminal --title="DJOS 安装器" -e "bash -c 'sudo /usr/local/sbin/djos-install; exec bash'"
 Icon=drive-harddisk
 Terminal=false
+StartupNotify=false
 Categories=System;
 DESKTOP
 chmod +x /home/djos/Desktop/install-djos.desktop
@@ -132,6 +133,7 @@ Comment=打开 DJOS Web 管理界面
 Exec=firefox-esr http://127.0.0.1:8800
 Icon=preferences-system
 Terminal=false
+StartupNotify=false
 Categories=Network;
 DESKTOP
 chmod +x /home/djos/Desktop/djos-panel.desktop
@@ -147,6 +149,7 @@ Comment=打开命令行终端
 Exec=xfce4-terminal
 Icon=utilities-terminal
 Terminal=false
+StartupNotify=false
 Categories=System;
 DESKTOP
 chmod +x /home/djos/Desktop/terminal.desktop
@@ -162,6 +165,7 @@ Comment=浏览文件
 Exec=thunar
 Icon=system-file-manager
 Terminal=false
+StartupNotify=false
 Categories=System;
 DESKTOP
 chmod +x /home/djos/Desktop/files.desktop

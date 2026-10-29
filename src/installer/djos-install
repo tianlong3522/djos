@@ -41,7 +41,10 @@ banner
 [ "$(id -u)" -eq 0 ] || die "安装器需要 root 权限"
 [ -d /run/live/medium ] || { log "当前不是 DJOS 安装介质，退出。"; exit 0; }
 
-# 已安装检测：若内部磁盘已存在 DJOS 系统分区且未指定 --force，交互询问是否抹盘重装
+# 已安装检测：若内部磁盘已存在 DJOS 系统分区且未指定 --force，按运行场景处理
+# - 交互终端（桌面图标启动）：60 秒倒计时后自动抹盘重装，Ctrl+C 可取消，零输入全自动
+# - 服务模式（djos-installer.service，无终端）：跳过安装，保护现有系统
+# - 显式 --yes：立即抹盘重装（无人值守）
 if [ "${FORCE:-0}" -ne 1 ]; then
     EXISTING_SYS=$(blkid -L DJOS_SYSTEM 2>/dev/null || true)
     if [ -n "$EXISTING_SYS" ]; then
@@ -49,19 +52,18 @@ if [ "${FORCE:-0}" -ne 1 ]; then
         if [ "${ASSUME_YES:-0}" -eq 1 ]; then
             log "--yes 已指定，自动抹盘重装。"
             FORCE=1
-        else
-            printf '%s' "输入 yes 并回车 = 抹除旧系统并重装；直接回车或输入其他 = 退出安装: "
-            if ! read -r -t 60 REINSTALL; then
-                REINSTALL=""
-            fi
+        elif [ -t 0 ]; then
+            log "60 秒后自动抹除旧系统并重装；按 Ctrl+C 取消并保留现有系统。"
+            for i in $(seq 60 -1 1); do
+                printf '\r    倒计时 %3d 秒（Ctrl+C 取消） ' "$i"
+                sleep 1
+            done
             echo
-            if [ "${REINSTALL,,}" = "yes" ]; then
-                log "确认重装，开始抹除旧系统。"
-                FORCE=1
-            else
-                log "已退出安装。当前硬盘系统保持不变，重启后将直接从硬盘启动。"
-                exit 0
-            fi
+            log "倒计时结束，开始抹盘重装。"
+            FORCE=1
+        else
+            log "无交互终端（服务模式）：跳过安装，现有系统保持不变。"
+            exit 0
         fi
     fi
 fi
