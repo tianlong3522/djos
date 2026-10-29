@@ -173,13 +173,31 @@ SYS_PART=$(part 3)
 DATA_PART=$(part 4)
 
 log "卸载目标磁盘上的所有分区……"
+# 停用桌面自动挂载服务：thunar/udisks2 会自动挂载旧系统分区（EBUSY 主因），
+# 且 umount 后可能立即重新挂载，必须先停再卸
+systemctl stop udisks2 2>/dev/null || true
+swapoff -a 2>/dev/null || true
 for name in $(lsblk -ln -o NAME "$TARGET" 2>/dev/null | tail -n +2); do
     umount -f "/dev/$name" 2>/dev/null || true
+    umount -l "/dev/$name" 2>/dev/null || true
 done
-swapoff -a 2>/dev/null || true
 
 log "清除旧分区表……"
-wipefs -a "$TARGET" >/dev/null 2>&1 || die "无法擦除 $TARGET"
+WIPE_OK=0
+for i in 1 2 3; do
+    if wipefs -a "$TARGET" >/dev/null 2>&1; then
+        WIPE_OK=1
+        break
+    fi
+    log "擦除 $TARGET 被系统拒绝（第 $i/3 次，分区可能仍被占用），解除占用后重试……"
+    BUSY=$(fuser -vm "$TARGET" 2>&1 | tr '\n' ' ' | tr -s ' ')
+    [ -n "$BUSY" ] && log "占用信息：$BUSY"
+    for name in $(lsblk -ln -o NAME "$TARGET" 2>/dev/null | tail -n +2); do
+        umount -l "/dev/$name" 2>/dev/null || true
+    done
+    sleep 2
+done
+[ "$WIPE_OK" -eq 1 ] || die "无法擦除 $TARGET（3 次重试后仍被占用，请重启 Live 系统后不打开文件管理器直接点安装图标重试）"
 
 log "创建 GPT 分区（ESP / BIOS Boot / 系统 / 数据）……"
 parted -s "$TARGET" mklabel gpt || die "写入分区表失败"
