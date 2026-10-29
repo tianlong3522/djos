@@ -105,14 +105,18 @@ cp "$ROOT/build/hooks/0500-grub-timeout.hook.binary" config/hooks/binary/
 chmod +x config/hooks/binary/0500-grub-timeout.hook.binary
 
 # 引导菜单超时：live-build 默认无限等待，导致开机卡在 GRUB 菜单。
-# 主保险：直接修改构建机 live-build 模板（无论字面量还是变量占位，统一改成 5 秒）。
+# 主保险：向 live-build 引导模板的 grub.cfg/config.cfg 追加 set timeout=5
+# （模板中可能没有现成的 timeout 行，实测 config.cfg 内容为动态生成，故统一追加）。
 LB_TPL="/usr/share/live/build/bootloaders"
 if [ -d "$LB_TPL" ]; then
-    find "$LB_TPL" -type f \( -name 'grub.cfg*' -o -name '*.in' \) -print0 |
-        xargs -0 -r sed -i -E 's/^set timeout=.*/set timeout=5/; s/\$\{LB_BOOTLOADERS_TIMEOUT\}/5/g' || true
-    echo "    已将 live-build 引导模板 timeout 设为 5 秒"
+    find "$LB_TPL" -type f \( -name 'grub.cfg*' -o -name 'config.cfg*' \) -print0 |
+        xargs -0 -r sed -i -E 's/^set timeout=.*/set timeout=5/' || true
+    find "$LB_TPL" -type f \( -name 'grub.cfg*' -o -name 'config.cfg*' \) | while read -r f; do
+        grep -q "^set timeout" "$f" || printf '\nset timeout=5\n' >> "$f"
+        echo "    模板已确保 timeout=5: $f"
+    done
 else
-    echo "    未找到 $LB_TPL（依赖 binary hook 兜底）"
+    echo "    未找到 $LB_TPL（依赖渲染产物兜底）"
 fi
 
 dump_apt_state() {
@@ -155,17 +159,18 @@ echo "==> binary 阶段（生成 ISO）"
 lb binary
 
 echo "==> 修正引导菜单超时（5 秒自动进入 Live）"
-# GRUB 配置链（grub.cfg/config.cfg/theme.cfg）中无 set timeout 时默认无限等待；
-# 在渲染产物 binary/boot/grub/config.cfg 尾部追加 timeout=5，再用 live-build
-# 官方 binary_iso 重打包（保留完整 BIOS/UEFI 引导记录；绝不用 xorriso 就地改 ISO）。
-if [ -f binary/boot/grub/config.cfg ]; then
-    sed -i -E 's/^set timeout=.*/set timeout=5/' binary/boot/grub/config.cfg binary/boot/grub/theme.cfg 2>/dev/null || true
-    grep -q "^set timeout" binary/boot/grub/config.cfg || printf '\nset timeout=5\n' >> binary/boot/grub/config.cfg
-    echo "    timeout=5 已写入渲染产物，重新打包 ISO"
+# 实测（v1.2.7）：渲染树中只有 binary/boot/grub/grub.cfg 落盘，config.cfg 由
+# live-build 动态生成不落盘。在 grub.cfg 尾部追加 timeout=5（位于 source config.cfg
+# 之后执行，必定生效），再用 live-build 官方 binary_iso 重打包以保留引导记录。
+echo "    live-build 版本: $(lb --version 2>/dev/null || echo unknown)"
+echo "    渲染树 cfg 文件:"; find binary -name '*.cfg' 2>/dev/null | head -10
+if [ -f binary/boot/grub/grub.cfg ]; then
+    grep -q "^set timeout" binary/boot/grub/grub.cfg || printf '\nset timeout=5\n' >> binary/boot/grub/grub.cfg
+    echo "    timeout=5 已追加到 binary/boot/grub/grub.cfg，重新打包 ISO"
     rm -f "$OUT"/live-image-*.iso "$OUT"/binary.hybrid.iso "$OUT"/binary.iso
     lb binary_iso
 else
-    echo "    未找到 binary/boot/grub/config.cfg，跳过超时修正"
+    echo "!! 未找到 binary/boot/grub/grub.cfg，跳过超时修正（菜单需手选）" >&2
 fi
 
 ISO=""
