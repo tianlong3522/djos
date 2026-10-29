@@ -154,6 +154,20 @@ fi
 echo "==> binary 阶段（生成 ISO）"
 lb binary
 
+echo "==> 修正引导菜单超时（5 秒自动进入 Live）"
+# GRUB 配置链（grub.cfg/config.cfg/theme.cfg）中无 set timeout 时默认无限等待；
+# 在渲染产物 binary/boot/grub/config.cfg 尾部追加 timeout=5，再用 live-build
+# 官方 binary_iso 重打包（保留完整 BIOS/UEFI 引导记录；绝不用 xorriso 就地改 ISO）。
+if [ -f binary/boot/grub/config.cfg ]; then
+    sed -i -E 's/^set timeout=.*/set timeout=5/' binary/boot/grub/config.cfg binary/boot/grub/theme.cfg 2>/dev/null || true
+    grep -q "^set timeout" binary/boot/grub/config.cfg || printf '\nset timeout=5\n' >> binary/boot/grub/config.cfg
+    echo "    timeout=5 已写入渲染产物，重新打包 ISO"
+    rm -f "$OUT"/live-image-*.iso "$OUT"/binary.hybrid.iso "$OUT"/binary.iso
+    lb binary_iso
+else
+    echo "    未找到 binary/boot/grub/config.cfg，跳过超时修正"
+fi
+
 ISO=""
 for candidate in "live-image-amd64.hybrid.iso" "DJOS-$VERSION-amd64.hybrid.iso" \
     "DJOS-$VERSION-amd64.iso"; do
@@ -169,19 +183,6 @@ fi
     echo "构建完成但未找到 ISO 文件" >&2
     exit 1
 }
-
-echo "==> 修正引导菜单超时（5 秒自动进入 Live）"
-# live-build 的 timeout 实际写在 /boot/grub/config.cfg（grub.cfg 仅 source 它）；
-# 对生成的 ISO 就地更新配置文件（xorriso 就地修改保留引导记录）。
-for CFG in boot/grub/grub.cfg boot/grub/config.cfg; do
-    xorriso -osirrox on -indev "$ISO" -extract "/$CFG" /tmp/djos-cfg >/dev/null 2>&1 || true
-    [ -f /tmp/djos-cfg ] || continue
-    grep -n "set timeout" /tmp/djos-cfg || true
-    sed -i -E 's/^set timeout=.*/set timeout=5/' /tmp/djos-cfg
-    grep -q "^set timeout" /tmp/djos-cfg || printf '\nset timeout=5\n' >> /tmp/djos-cfg
-    xorriso -indev "$ISO" -outdev "$ISO" -update /tmp/djos-cfg "/$CFG" && echo "    timeout=5 已写入 /$CFG" || echo "    /$CFG 更新失败"
-    rm -f /tmp/djos-cfg
-done
 
 TARGET="$OUT/DJOS-$VERSION-amd64.iso"
 mv "$ISO" "$TARGET"
