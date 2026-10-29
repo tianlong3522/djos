@@ -41,13 +41,28 @@ banner
 [ "$(id -u)" -eq 0 ] || die "安装器需要 root 权限"
 [ -d /run/live/medium ] || { log "当前不是 DJOS 安装介质，退出。"; exit 0; }
 
-# 已安装检测：若内部磁盘已存在 DJOS 系统分区且未指定 --force，则跳过安装直接从硬盘启动
+# 已安装检测：若内部磁盘已存在 DJOS 系统分区且未指定 --force，交互询问是否抹盘重装
 if [ "${FORCE:-0}" -ne 1 ]; then
     EXISTING_SYS=$(blkid -L DJOS_SYSTEM 2>/dev/null || true)
     if [ -n "$EXISTING_SYS" ]; then
         log "检测到已安装的 DJOS 系统分区：$EXISTING_SYS"
-        log "跳过安装，从硬盘启动。如需重装请添加 --force 参数。"
-        exit 0
+        if [ "${ASSUME_YES:-0}" -eq 1 ]; then
+            log "--yes 已指定，自动抹盘重装。"
+            FORCE=1
+        else
+            printf '%s' "输入 yes 并回车 = 抹除旧系统并重装；直接回车或输入其他 = 退出安装: "
+            if ! read -r -t 60 REINSTALL; then
+                REINSTALL=""
+            fi
+            echo
+            if [ "${REINSTALL,,}" = "yes" ]; then
+                log "确认重装，开始抹除旧系统。"
+                FORCE=1
+            else
+                log "已退出安装。当前硬盘系统保持不变，重启后将直接从硬盘启动。"
+                exit 0
+            fi
+        fi
     fi
 fi
 
@@ -262,6 +277,8 @@ passwd -u "$DJOS_ADMIN_USER" >/dev/null 2>&1 || true
 
 # 装好的系统：桌面自动登录管理员（若目标系统带桌面）
 if [ -d /etc/lightdm ]; then
+    # 移除 Live 带来的 djos 自动登录配置，只保留主配置（autologin admin），避免相互覆盖
+    rm -f /etc/lightdm/lightdm.conf.d/50-djos-autologin.conf
     cat > /etc/lightdm/lightdm.conf <<'LIGHTDM'
 [Seat:*]
 autologin-user=admin
@@ -270,6 +287,13 @@ user-session=xfce
 greeter-session=lightdm-gtk-greeter
 LIGHTDM
 fi
+
+# 系统基础加固：/tmp 权限（X 会话必需）、主机名解析（修复 sudo 无法解析主机警告）、
+# 管理员加入硬件相关组，防止桌面会话启动失败
+chmod 1777 /tmp 2>/dev/null || true
+chown root:root /tmp 2>/dev/null || true
+grep -q "127.0.1.1" /etc/hosts 2>/dev/null || echo "127.0.1.1 DJOS" >> /etc/hosts
+usermod -aG video,audio,plugdev "$DJOS_ADMIN_USER" 2>/dev/null || true
 
 mkdir -p /volume1/{public,media,backup,downloads,appdata,docker,home,@snapshots,#recycle}
 mkdir -p "/volume1/home/$DJOS_ADMIN_USER"
