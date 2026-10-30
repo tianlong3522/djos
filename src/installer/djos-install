@@ -42,8 +42,8 @@ banner
 [ -d /run/live/medium ] || { log "当前不是 DJOS 安装介质，退出。"; exit 0; }
 
 # 已安装检测：若内部磁盘已存在 DJOS 系统分区且未指定 --force，按运行场景处理
-# - 交互终端（桌面图标启动）：60 秒倒计时后自动抹盘重装，Ctrl+C 可取消，零输入全自动
-# - 服务模式（djos-installer.service，无终端）：跳过安装，保护现有系统
+# - 交互终端（Live 控制台 tty1 直进安装器）：60 秒倒计时后自动抹盘重装，Ctrl+C 可取消，零输入全自动
+# - 服务模式（无 tty）：跳过安装，保护现有系统
 # - 显式 --yes：立即抹盘重装（无人值守）
 if [ "${FORCE:-0}" -ne 1 ]; then
     EXISTING_SYS=$(blkid -L DJOS_SYSTEM 2>/dev/null || true)
@@ -175,6 +175,8 @@ DATA_PART=$(part 4)
 log "卸载目标磁盘上的所有分区……"
 systemctl stop udisks2 2>/dev/null || true
 systemctl stop lvm2-monitor 2>/dev/null || true
+# 停掉 Live 内的容器运行时：其 overlay 层数据文件不进目标盘，且避免复制期间持续写入
+systemctl stop docker.service docker.socket containerd 2>/dev/null || true
 swapoff -a 2>/dev/null || true
 vgchange -an 2>/dev/null || true
 mdadm --stop --scan 2>/dev/null || true
@@ -234,6 +236,12 @@ mount "$ESP_PART" /target/boot/efi || die "挂载 ESP 失败"
 mount -o compress=zstd:3 "$DATA_PART" /target/volume1 || die "挂载数据分区失败"
 
 log "复制 DJOS 系统文件（约 2-5 分钟）……"
+# 排除清单注意：
+# - /usr/lib/live/mount 是 live-boot 的挂载点（squashfs 视图 + overlay rw 层），
+#   Live 里 Docker 会把 devicemapper 稀疏大文件写进 overlay/rw/volume1/docker，
+#   照搬会把目标系统分区瞬间写满（No space left on device），必须整体排除；
+# - /var/lib/docker、/var/lib/containerd 是 Live 运行时数据，目标盘由
+#   daemon.json 指向 /volume1/docker，首次启动时自动重建。
 cat >/tmp/djos-rsync-exclude <<'EOF'
 /proc
 /sys
@@ -247,7 +255,10 @@ cat >/tmp/djos-rsync-exclude <<'EOF'
 /media
 /mnt
 /live
+/usr/lib/live/mount
 /var/lib/djos
+/var/lib/docker
+/var/lib/containerd
 /var/log
 /var/tmp
 /var/cache/apt/archives
@@ -308,6 +319,8 @@ passwd -u "$DJOS_ADMIN_USER" >/dev/null 2>&1 || true
 
 # 装好的系统：桌面自动登录管理员（若目标系统带桌面）
 if [ -d /etc/lightdm ]; then
+    # Live 环境默认 multi-user.target（控制台安装器），装好的系统恢复图形桌面
+    systemctl set-default graphical.target >/dev/null 2>&1 || true
     # 移除 Live 带来的 djos 自动登录配置，只保留主配置（autologin admin），避免相互覆盖
     rm -f /etc/lightdm/lightdm.conf.d/50-djos-autologin.conf
     cat > /etc/lightdm/lightdm.conf <<'LIGHTDM'

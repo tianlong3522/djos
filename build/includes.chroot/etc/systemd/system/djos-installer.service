@@ -6,7 +6,12 @@ Conflicts=getty@tty1.service
 
 [Service]
 Type=oneshot
+# 直接占用 tty1 作为安装界面：交互倒计时、多磁盘选择均可用
 ExecStart=/usr/local/sbin/djos-install --auto
+StandardInput=tty
+TTYPath=/dev/tty1
+TTYReset=yes
+TTYVHangup=yes
 StandardOutput=journal+console
 StandardError=journal+console
 TimeoutStartSec=0
