@@ -383,18 +383,31 @@ sed -i 's/^GRUB_TIMEOUT=.*/GRUB_TIMEOUT=3/' /etc/default/grub 2>/dev/null || tru
 grep -q '^GRUB_CMDLINE_LINUX_DEFAULT' /etc/default/grub 2>/dev/null || \
     echo 'GRUB_CMDLINE_LINUX_DEFAULT="quiet console=tty0"' >> /etc/default/grub
 
-echo "==> 生成 GRUB 配置 /boot/grub/grub.cfg ……"
-if ! update-grub; then
-    grub-mkconfig -o /boot/grub/grub.cfg || { echo "严重：无法生成 GRUB 配置"; exit 1; }
-fi
-
+# 关键顺序：必须先 grub-install 安装核心镜像（它会创建 /boot/grub 目录及模块），
+# 之后 update-grub/grub-mkconfig 才能写入 /boot/grub/grub.cfg.new 并生成 grub.cfg。
+# 旧顺序（先 update-grub 后 grub-install）会导致 /boot/grub 目录尚不存在，
+# grub-mkconfig 报 "cannot create /boot/grub/grub.cfg.new: Directory nonexistent" 而安装器失败。
 echo "==> 安装系统引导（强依赖，失败即中止）……"
+mkdir -p /boot/grub
 if [ -d /sys/firmware/efi ]; then
     echo "    固件类型：UEFI"
     mkdir -p /boot/efi/EFI/BOOT
     grub-install --target=x86_64-efi --efi-directory=/boot/efi \
         --bootloader-id=DJOS --removable --no-nvram || \
         echo "!! grub-install(EFI) 返回失败，改用 grub-mkstandalone 兜底"
+else
+    echo "    固件类型：BIOS（Legacy）"
+    grub-install --target=i386-pc "$DJOS_TARGET" || { echo "严重：BIOS 引导安装失败"; exit 1; }
+    echo "    BIOS 引导就绪：$DJOS_TARGET"
+fi
+
+echo "==> 生成 GRUB 配置 /boot/grub/grub.cfg ……"
+if ! update-grub; then
+    grub-mkconfig -o /boot/grub/grub.cfg || { echo "严重：无法生成 GRUB 配置"; exit 1; }
+fi
+[ -s /boot/grub/grub.cfg ] || { echo "严重：/boot/grub/grub.cfg 缺失"; exit 1; }
+
+if [ -d /sys/firmware/efi ]; then
     # 兜底：无论 grub-install 是否成功，都确保 UEFI fallback 路径存在可引导文件 BOOTX64.EFI。
     # 虚拟机（OVMF）无 NVRAM 时正是从 \EFI\BOOT\BOOTX64.EFI 引导，缺它才会出现 "Boot0001 Not Found"。
     if [ ! -s /boot/efi/EFI/BOOT/BOOTX64.EFI ]; then
@@ -405,10 +418,6 @@ if [ -d /sys/firmware/efi ]; then
     fi
     [ -s /boot/efi/EFI/BOOT/BOOTX64.EFI ] || { echo "严重：/boot/efi/EFI/BOOT/BOOTX64.EFI 缺失"; exit 1; }
     echo "    EFI 引导就绪：/boot/efi/EFI/BOOT/BOOTX64.EFI"
-else
-    echo "    固件类型：BIOS（Legacy）"
-    grub-install --target=i386-pc "$DJOS_TARGET" || { echo "严重：BIOS 引导安装失败"; exit 1; }
-    echo "    BIOS 引导就绪：$DJOS_TARGET"
 fi
 
 # 清除唯一标识与日志
