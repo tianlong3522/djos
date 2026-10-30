@@ -13,12 +13,12 @@ set -euo pipefail
 
 VMID="${1:-$(pvesh get /cluster/nextid)}"
 DISK_GB="${2:-500}"
-ISO_NAME="DJOS-1.2.12-amd64.iso"
+ISO_NAME="DJOS-1.3.1-amd64.iso"
 ISO_DIR="/var/lib/vz/template/iso"
 ISO_PATH="$ISO_DIR/$ISO_NAME"
 STORAGE="local-lvm"
 MIRROR="https://gh-proxy.com/"
-BASE_URL="https://github.com/tianlong3522/djos/releases/download/v1.2.12"
+BASE_URL="https://github.com/tianlong3522/djos/releases/download/v1.3.1"
 
 echo "==> DJOS 部署: VM=$VMID 磁盘=${DISK_GB}GB 存储=$STORAGE"
 
@@ -35,7 +35,7 @@ fi
 mkdir -p "$ISO_DIR"
 if [ ! -s "$ISO_PATH" ]; then
     if wget -q --spider "${MIRROR}${BASE_URL}/$ISO_NAME"; then
-        echo "==> 下载 $ISO_NAME（约 474MB，走 gh-proxy 加速）"
+        echo "==> 下载 $ISO_NAME（约 2GB，走 gh-proxy 加速）"
         wget -c -O "$ISO_PATH" "${MIRROR}${BASE_URL}/$ISO_NAME"
     elif wget -q --spider "${MIRROR}${BASE_URL}/$ISO_NAME.part-00"; then
         echo "==> 下载分卷 $ISO_NAME.part-00..NN（走 gh-proxy 加速）"
