@@ -173,10 +173,13 @@ SYS_PART=$(part 3)
 DATA_PART=$(part 4)
 
 log "卸载目标磁盘上的所有分区……"
-# 停用桌面自动挂载服务：thunar/udisks2 会自动挂载旧系统分区（EBUSY 主因），
-# 且 umount 后可能立即重新挂载，必须先停再卸
 systemctl stop udisks2 2>/dev/null || true
+systemctl stop lvm2-monitor 2>/dev/null || true
 swapoff -a 2>/dev/null || true
+vgchange -an 2>/dev/null || true
+mdadm --stop --scan 2>/dev/null || true
+# 暂停 udev 事件队列：擦表期间内核分区刷新（BLKRRPART）会被 udev 的瞬时设备探测打断
+udevadm control --stop-exec-queue 2>/dev/null || true
 for name in $(lsblk -ln -o NAME "$TARGET" 2>/dev/null | tail -n +2); do
     umount -f "/dev/$name" 2>/dev/null || true
     umount -l "/dev/$name" 2>/dev/null || true
@@ -185,19 +188,27 @@ done
 log "清除旧分区表……"
 WIPE_OK=0
 for i in 1 2 3; do
-    if wipefs -a "$TARGET" >/dev/null 2>&1; then
+    if wipefs -a "$TARGET" 2>"/tmp/wipefs.err"; then
         WIPE_OK=1
         break
     fi
-    log "擦除 $TARGET 被系统拒绝（第 $i/3 次，分区可能仍被占用），解除占用后重试……"
-    BUSY=$(fuser -vm "$TARGET" 2>&1 | tr '\n' ' ' | tr -s ' ')
-    [ -n "$BUSY" ] && log "占用信息：$BUSY"
-    for name in $(lsblk -ln -o NAME "$TARGET" 2>/dev/null | tail -n +2); do
-        umount -l "/dev/$name" 2>/dev/null || true
-    done
+    log "擦除 $TARGET 被系统拒绝（第 $i/3 次），解除占用后重试……"
+    ERRMSG=$(tail -n 2 /tmp/wipefs.err 2>/dev/null | tr '\n' ' ' | tr -s ' ')
+    [ -n "$ERRMSG" ] && log "内核报错：$ERRMSG"
+    vgchange -an 2>/dev/null || true
+    dmsetup remove_all 2>/dev/null || true
+    partx -d --nr 1-128 "$TARGET" 2>/dev/null || true
     sleep 2
 done
-[ "$WIPE_OK" -eq 1 ] || die "无法擦除 $TARGET（3 次重试后仍被占用，请重启 Live 系统后不打开文件管理器直接点安装图标重试）"
+
+if [ "$WIPE_OK" -ne 1 ]; then
+    log "常规擦除仍失败，改用 dd 直接清除磁盘头部签名（绕过内核分区表刷新）……"
+    dd if=/dev/zero of="$TARGET" bs=1M count=16 conv=fsync status=none || die "dd 清除 $TARGET 失败，磁盘可能存在硬件级故障"
+    partx -d --nr 1-128 "$TARGET" 2>/dev/null || true
+    wipefs -a "$TARGET" >/dev/null 2>&1 || true
+    log "dd 擦除完成，继续安装。"
+fi
+udevadm control --start-exec-queue 2>/dev/null || true
 
 log "创建 GPT 分区（ESP / BIOS Boot / 系统 / 数据）……"
 parted -s "$TARGET" mklabel gpt || die "写入分区表失败"
