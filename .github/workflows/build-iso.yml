@@ -39,22 +39,8 @@ jobs:
           if-no-files-found: error
           compression-level: 0
 
-      # GitHub Release 单文件上限 2GiB，超过 1GiB 就切成 part-00/01/...
-      - name: Split ISO if > 1GiB
-        if: startsWith(github.ref, 'refs/tags/')
-        run: |
-          cd out
-          ISO=$(ls DJOS-*.iso 2>/dev/null | head -1)
-          [ -n "$ISO" ] || { echo "no iso"; exit 1; }
-          SIZE=$(stat -c%s "$ISO")
-          echo "ISO size: $SIZE bytes"
-          if [ "$SIZE" -gt 1073741824 ]; then
-            split -b 1024M -d -a 2 "$ISO" "${ISO}.part-"
-            rm -f "$ISO"
-            echo "split into parts:"
-            ls -lh "${ISO}".part-*
-          fi
-
+      # ISO 目前约 1.03GiB，远低于 GitHub Release 单文件上限 2GiB，
+      # 直接发布单个 .iso 文件，避免切分后用户误烧 part-00 导致截断无法引导。
       - name: Publish release asset
         if: startsWith(github.ref, 'refs/tags/')
         env:
@@ -62,7 +48,7 @@ jobs:
         run: |
           gh release create "$GITHUB_REF_NAME" \
             --title "$GITHUB_REF_NAME" \
-            --notes "DJOS NAS 全量离线版 $GITHUB_REF_NAME" 2>/dev/null || true
+            --notes "DJOS NAS 全量离线版 $GITHUB_REF_NAME（下载 .iso 单文件，勿下载部分文件）" 2>/dev/null || true
           OK=0
           for i in 1 2 3 4 5; do
             if gh release upload "$GITHUB_REF_NAME" out/* --clobber; then
