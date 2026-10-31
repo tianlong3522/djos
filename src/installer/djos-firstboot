@@ -63,6 +63,10 @@ if command -v nmcli >/dev/null 2>&1; then
     done
 fi
 
+# 先确保 nginx 监听 8800（不依赖数据库，提前拉起，避免 DB 初始化失败导致管理界面整站打不开）
+systemctl daemon-reload
+systemctl enable --now nginx.service >/dev/null 2>&1 || true
+
 # 数据库（必须成功，否则 API 无法启动）
 echo "初始化数据库……"
 (cd /opt/djos/api && DJOS_ADMIN_PASSWORD="$ADMIN_PASSWORD" python3 - <<'PY'

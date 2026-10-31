@@ -313,6 +313,9 @@ chroot /target /usr/bin/env DJOS_TARGET="$TARGET" \
     /bin/bash -e <<'CHROOT'
 export DEBIAN_FRONTEND=noninteractive
 export PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
+# chroot 已 bind mount /run，systemctl 会误连 Live 的 systemd(PID1) 而把 enable/disable
+# 写到 Live 而非目标盘；强制 offline 模式，使 systemctl 直接操作目标盘文件系统。
+export SYSTEMD_OFFLINE=1
 
 # 移除 Live 环境痕迹
 userdel -r user >/dev/null 2>&1 || true
