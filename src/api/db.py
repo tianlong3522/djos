@@ -102,7 +102,7 @@ def init_db() -> None:
         count = conn.execute("SELECT COUNT(*) FROM users").fetchone()[0]
         if count == 0:
             conn.execute(
-                "INSERT INTO users(username, password, role, must_change, created_at) "
+                "INSERT OR IGNORE INTO users(username, password, role, must_change, created_at) "
                 "VALUES(?,?,?,?,?)",
                 ("admin", hash_password(DEFAULT_ADMIN_PASSWORD), "admin", 0, now()),
             )
