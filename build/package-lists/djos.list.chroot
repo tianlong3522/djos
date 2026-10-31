@@ -72,32 +72,3 @@ grub-common
 efibootmgr
 shim-signed
 mtools
-
-# 桌面环境（XFCE + 自动登录 + 中文化）
-task-xfce-desktop
-lightdm
-xfce4
-xfce4-goodies
-thunar
-xfce4-terminal
-xfce4-screenshooter
-firefox-esr
-fonts-wqy-zenhei
-fonts-wqy-microhei
-fonts-noto-cjk
-xfonts-intl-chinese
-fcitx5
-fcitx5-chinese-addons
-fcitx5-config-qt
-desktop-base
-
-# 桌面常用工具
-file-roller
-mousepad
-ristretto
-parole
-atril
-gnome-calculator
-sshfs
-gvfs-backends
-gvfs-fuse

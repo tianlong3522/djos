@@ -58,7 +58,7 @@ lb config noauto \
     --initsystem systemd \
     --memtest none \
     --linux-flavours amd64 \
-    --bootappend-live "boot=live components quiet loglevel=3 console=tty0 live-config.autologin=lightdm live-config.username=djos" \
+    --bootappend-live "boot=live components quiet loglevel=3 console=tty0 live-config.username=djos" \
     --mirror-bootstrap "$MIRROR" \
     --mirror-chroot "$MIRROR" \
     --mirror-chroot-security "$MIRROR_SEC" \

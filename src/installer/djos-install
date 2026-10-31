@@ -52,6 +52,12 @@ if [ "${FORCE:-0}" -ne 1 ]; then
         if [ "${ASSUME_YES:-0}" -eq 1 ]; then
             log "--yes 已指定，自动抹盘重装。"
             FORCE=1
+        elif [ "${AUTO:-0}" -eq 1 ]; then
+            # 服务模式（--auto，systemd 在 tty1 拉起）：发现已有系统即跳过。
+            # 避免 VM 中安装介质(CD/ISO)仍挂着、且硬盘引导未接管时，
+            # 每次开机都回到 Live 并 60 秒倒计时抹盘重装，形成"反复安装"死循环。
+            log "--auto 服务模式：检测到已安装系统，跳过安装（硬盘已装妥，请移除安装介质后重启）。"
+            exit 0
         elif [ -t 0 ]; then
             log "60 秒后自动抹除旧系统并重装；按 Ctrl+C 取消并保留现有系统。"
             for i in $(seq 60 -1 1); do
@@ -323,23 +329,12 @@ usermod -aG djos,sudo,docker "$DJOS_ADMIN_USER" 2>/dev/null || true
 echo "$DJOS_ADMIN_USER:$DJOS_ADMIN_PASSWORD" | chpasswd
 passwd -u "$DJOS_ADMIN_USER" >/dev/null 2>&1 || true
 
-# 装好的系统：桌面自动登录管理员（若目标系统带桌面）
-if [ -d /etc/lightdm ]; then
-    # Live 环境默认 multi-user.target（控制台安装器），装好的系统恢复图形桌面
-    systemctl set-default graphical.target >/dev/null 2>&1 || true
-    # 移除 Live 带来的 djos 自动登录配置，只保留主配置（autologin admin），避免相互覆盖
-    rm -f /etc/lightdm/lightdm.conf.d/50-djos-autologin.conf
-    cat > /etc/lightdm/lightdm.conf <<'LIGHTDM'
-[Seat:*]
-autologin-user=admin
-autologin-user-timeout=0
-user-session=xfce
-greeter-session=lightdm-gtk-greeter
-LIGHTDM
-fi
+# 无桌面（headless NAS）：装好的系统保持 multi-user.target，不启动图形界面。
+systemctl set-default multi-user.target >/dev/null 2>&1 || true
+rm -rf /etc/lightdm /etc/lightdm.conf 2>/dev/null || true
 
-# 系统基础加固：/tmp 权限（X 会话必需）、主机名解析（修复 sudo 无法解析主机警告）、
-# 管理员加入硬件相关组，防止桌面会话启动失败
+# 系统基础加固：/tmp 权限、主机名解析（修复 sudo 无法解析主机警告）、
+# 管理员加入硬件相关组
 chmod 1777 /tmp 2>/dev/null || true
 chown root:root /tmp 2>/dev/null || true
 grep -q "127.0.1.1" /etc/hosts 2>/dev/null || echo "127.0.1.1 DJOS" >> /etc/hosts
@@ -363,7 +358,7 @@ EOF
 # 首次启动初始化服务
 chmod +x /usr/local/sbin/djos-firstboot 2>/dev/null || true
 systemctl enable djos-firstboot.service >/dev/null 2>&1 || true
-systemctl enable djos-api.service nginx.service >/dev/null 2>&1 || true
+systemctl enable djos-api.service nginx.service djos-banner.service >/dev/null 2>&1 || true
 for svc in ssh chrony avahi-daemon smbd nmbd nfs-server docker; do
     systemctl enable "$svc" >/dev/null 2>&1 || true
 done
@@ -441,16 +436,20 @@ umount -l /target/volume1 2>/dev/null || true
 umount -l /target/boot/efi 2>/dev/null || true
 umount -l /target 2>/dev/null || true
 
+LOCAL_IP=$(hostname -I 2>/dev/null | awk '{print $1}')
+[ -z "$LOCAL_IP" ] && LOCAL_IP="(DHCP 自动获取中)"
+
 cat <<EOF
 
   ✅ DJOS 安装完成
   ------------------------------------------------------
-  管理地址 : http://<本机IP>:8800  或 http://djos.local:8800
+  管理地址 : http://${LOCAL_IP}:8800  或 http://djos.local:8800
   初始账户 : $ADMIN_USER
   初始密码 : $ADMIN_PASSWORD
-  提示     : 可在 Web 管理界面「用户管理」中随时修改密码。
+  提示     : 开机后由 DHCP 自动获取 IP，控制台与开机横幅会显示真实地址；
+             也可用 http://djos.local:8800 或路由器后台查看。
 
-  系统将在 10 秒后自动重启，此时可拔下 U 盘。
+  系统将在 10 秒后自动重启，此时可移除安装介质。
 EOF
 sleep 10
 sync

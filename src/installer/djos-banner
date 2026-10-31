@@ -1,0 +1,22 @@
+#!/usr/bin/env bash
+# 开机横幅：把当前 DHCP 获取的 IPv4 地址写入 /etc/issue 与 /etc/motd，
+# 供无显示器/headless NAS 场景在本地控制台或 SSH 登录时直接看到管理地址。
+set -u
+
+IP=$(hostname -I 2>/dev/null | awk '{print $1}')
+
+{
+    echo ""
+    echo "  ============================================"
+    echo "    DJOS NAS 已就绪"
+    echo "    管理地址: http://${IP:-<等待 DHCP>}:8800"
+    echo "    管理地址: http://djos.local:8800"
+    echo "  ============================================"
+    echo ""
+} > /etc/issue 2>/dev/null || true
+
+{
+    echo ""
+    echo "DJOS NAS 管理地址: http://${IP:-<等待 DHCP>}:8800  (或 http://djos.local:8800)"
+    echo ""
+} > /etc/motd 2>/dev/null || true

@@ -11,6 +11,7 @@ chmod 700 /var/lib/djos
 install -m 0755 /opt/djos/installer/djos-install /usr/local/sbin/djos-install
 install -m 0755 /opt/djos/installer/djos-firstboot /usr/local/sbin/djos-firstboot
 install -m 0755 /opt/djos/installer/djos-resetpw /usr/local/sbin/djos-resetpw
+install -m 0755 /opt/djos/installer/djos-banner /usr/local/sbin/djos-banner
 chmod 0755 /opt/djos/installer/*.sh 2>/dev/null || true
 chmod -R a+rX /opt/djos/web /opt/djos/api /opt/djos/packages
 chmod 0700 /opt/djos/installer
@@ -35,10 +36,10 @@ if [ ! -f /etc/docker/daemon.json ]; then
 EOF
 fi
 
-systemctl enable djos-api.service djos-firstboot.service djos-installer.service nginx.service >/dev/null 2>&1 || true
+systemctl enable djos-api.service djos-firstboot.service djos-installer.service djos-banner.service nginx.service >/dev/null 2>&1 || true
 systemctl enable ssh chrony avahi-daemon >/dev/null 2>&1 || true
-# Live 环境直接进入文本控制台安装器（不启动桌面），由 djos-installer.service 在 tty1 拉起。
-# 装好的系统在 djos-install 的 chroot 段恢复 graphical.target。
+# 无桌面（headless NAS）：Live 与装好的系统都保持 multi-user.target，
+# 由 djos-installer.service 在 tty1 直接进入文本安装器，不再启动图形界面。
 systemctl set-default multi-user.target >/dev/null 2>&1 || true
 
 # 让 Live 环境也可直接访问 Web 管理界面（若安装器未运行）
@@ -55,41 +56,9 @@ usermod -aG docker djos
 echo "djos ALL=(root) NOPASSWD: /usr/local/sbin/djos-install" > /etc/sudoers.d/djos-installer
 chmod 0440 /etc/sudoers.d/djos-installer
 
-# lightdm 自动登录 djos：同时写主配置文件（最高优先级）与 conf.d（双保险）。
-# live-config 可能依赖 boot 参数管理 autologin，主文件确保覆盖一切。
-mkdir -p /etc/lightdm/lightdm.conf.d
-cat > /etc/lightdm/lightdm.conf <<'LIGHTDM'
-[Seat:*]
-autologin-user=djos
-autologin-user-timeout=0
-user-session=xfce
-greeter-session=lightdm-gtk-greeter
-LIGHTDM
-cat > /etc/lightdm/lightdm.conf.d/50-djos-autologin.conf <<'LIGHTDM'
-[Seat:*]
-autologin-user=djos
-autologin-user-timeout=0
-user-session=xfce
-greeter-session=lightdm-gtk-greeter
-LIGHTDM
+# 无桌面环境：不安装/不配置 lightdm 自动登录、桌面输入法与图形会话。
 
-# 桌面环境变量与中文输入法
-mkdir -p /home/djos/.config
-cat > /home/djos/.xsessionrc <<'XSRC'
-export GTK_IM_MODULE=fcitx
-export QT_IM_MODULE=fcitx
-export XMODIFIERS=@im=fcitx
-export LANG=zh_CN.UTF-8
-export LC_ALL=zh_CN.UTF-8
-XSRC
-chown djos:djos /home/djos/.xsessionrc
-chmod +x /home/djos/.xsessionrc
-
-# 生成中文 locale
-sed -i 's/^# *zh_CN.UTF-8 UTF-8/zh_CN.UTF-8 UTF-8/' /etc/locale.gen 2>/dev/null || true
-locale-gen zh_CN.UTF-8 >/dev/null 2>&1 || true
-
-# Live 不再提供桌面/演示环境：开机由 djos-installer.service 直接在 tty1 进入安装界面。
+# Live 开机由 djos-installer.service 直接在 tty1 进入文本安装界面。
 # 如需手动重试安装，可在控制台以 djos/djos123 登录后执行 sudo djos-install。
 
 echo "DJOS hook finished"
